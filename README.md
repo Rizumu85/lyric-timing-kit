@@ -73,7 +73,7 @@ git clone https://github.com/moriwx/FA-Kara vendor/FA-Kara
 | `tools/` | 全部脚本、试听页和歌名页的模板 |
 | `tools/format/` | 歌词格式的读写（ID3、LRC、Ruby LRC），和配套的播放器模组保持一致 |
 | `skill/lyric-timing/` | Agent Skill：流程、判断原则、命令和踩过的坑 |
-| `folia-mod/lyrics-review/` | 可选的 Folia 播放器插件：听歌时一键把当前歌曲送回试听页 |
+| `folia-mod/lyrics-review/` | 可选的 Folia 播放器插件：听歌时一键把当前歌曲送回试听页。用 `node tools/install_folia_mod.mjs --write` 安装 |
 | `data/` | 你的数据（不进仓库）：每首歌的歌词表、草稿、备份、缓存、模型 |
 
 ## 播放器

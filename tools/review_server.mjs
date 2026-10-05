@@ -169,5 +169,5 @@ http.createServer(async (request, response) => {
 }).listen(PORT, '127.0.0.1', () => {
   const address = `http://127.0.0.1:${PORT}/`;
   console.log(`试听页：${address}（关闭这个窗口即停止）`);
-  if (!process.argv.includes('--no-open')) exec(`start "" "${address}"`);
+  if (!process.argv.includes('--no-open')) exec(process.platform === 'win32' ? `start "" "${address}"` : process.platform === 'darwin' ? `open "${address}"` : `xdg-open "${address}"`);
 });

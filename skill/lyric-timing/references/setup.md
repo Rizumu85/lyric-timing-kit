@@ -57,4 +57,5 @@ MP3 由 `batch_embed.mjs` 直接写，其余由 `embed_tags.py` 写。CAF 没有
 
 - **视频下载**：从卡拉 OK 视频读取读音或时间时需要 yt-dlp；Bilibili 需要 yutto 和用户自己的登录。
 - **用户浏览器**：部分歌词站拦截脚本请求，只能通过用户自己的浏览器读取。宿主没有这个能力时跳过对应步骤，不影响其余流程。
+- **播放器里的“送去复查”按钮**：可选的 Folia 插件，由 `install_folia_mod.mjs` 安装，见 [试听与反馈](review.md)。
 - **播放器**：内嵌歌词的 Ruby 部分使用 TimeTag/NicoKara 的 `@Ruby` 扩展。普通播放器只会读到普通双语歌词，这是预期行为。要显示注音，可以用 Folia 加「双语 · 注音歌词」模组（Folia 模组市场里有，源码在 https://github.com/Rizumu85/folia-bilingual-ruby-lyrics ）。
