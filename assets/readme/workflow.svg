@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="280" viewBox="0 0 1200 280" role="img" aria-labelledby="title desc">
+  <title id="title">流程：打轴、自检、复查、写入</title>
+  <desc id="desc">四个阶段依次进行：打轴得到逐字时间；自检核对歌词版本和读音；复查只把可疑的歌和行交给人；写入前备份、写入后回读校验。</desc>
+  <rect width="1200" height="280" rx="24" fill="#12141A"/>
+  <path d="M64 88H1136" stroke="#5C606C" stroke-width="2"/>
+  <path d="M64 76V100" stroke="#5C606C" stroke-width="2"/><path d="M92 82V94" stroke="#5C606C" stroke-width="2"/><path d="M120 82V94" stroke="#5C606C" stroke-width="2"/><path d="M148 82V94" stroke="#5C606C" stroke-width="2"/><path d="M176 82V94" stroke="#5C606C" stroke-width="2"/><path d="M204 76V100" stroke="#5C606C" stroke-width="2"/><path d="M232 82V94" stroke="#5C606C" stroke-width="2"/><path d="M260 82V94" stroke="#5C606C" stroke-width="2"/><path d="M288 82V94" stroke="#5C606C" stroke-width="2"/><path d="M316 82V94" stroke="#5C606C" stroke-width="2"/><path d="M344 76V100" stroke="#5C606C" stroke-width="2"/><path d="M372 82V94" stroke="#5C606C" stroke-width="2"/><path d="M400 82V94" stroke="#5C606C" stroke-width="2"/><path d="M428 82V94" stroke="#5C606C" stroke-width="2"/><path d="M456 82V94" stroke="#5C606C" stroke-width="2"/><path d="M484 76V100" stroke="#5C606C" stroke-width="2"/><path d="M512 82V94" stroke="#5C606C" stroke-width="2"/><path d="M540 82V94" stroke="#5C606C" stroke-width="2"/><path d="M568 82V94" stroke="#5C606C" stroke-width="2"/><path d="M596 82V94" stroke="#5C606C" stroke-width="2"/><path d="M624 76V100" stroke="#5C606C" stroke-width="2"/><path d="M652 82V94" stroke="#5C606C" stroke-width="2"/><path d="M680 82V94" stroke="#5C606C" stroke-width="2"/><path d="M708 82V94" stroke="#5C606C" stroke-width="2"/><path d="M736 82V94" stroke="#5C606C" stroke-width="2"/><path d="M764 76V100" stroke="#5C606C" stroke-width="2"/><path d="M792 82V94" stroke="#5C606C" stroke-width="2"/><path d="M820 82V94" stroke="#5C606C" stroke-width="2"/><path d="M848 82V94" stroke="#5C606C" stroke-width="2"/><path d="M876 82V94" stroke="#5C606C" stroke-width="2"/><path d="M904 76V100" stroke="#5C606C" stroke-width="2"/><path d="M932 82V94" stroke="#5C606C" stroke-width="2"/><path d="M960 82V94" stroke="#5C606C" stroke-width="2"/><path d="M988 82V94" stroke="#5C606C" stroke-width="2"/><path d="M1016 82V94" stroke="#5C606C" stroke-width="2"/><path d="M1044 76V100" stroke="#5C606C" stroke-width="2"/><path d="M1072 82V94" stroke="#5C606C" stroke-width="2"/><path d="M1100 82V94" stroke="#5C606C" stroke-width="2"/><path d="M1128 82V94" stroke="#5C606C" stroke-width="2"/>
+  <g id="stage-01">
+    <circle cx="64" cy="88" r="8" fill="#12141A" stroke="#A6CDE8" stroke-width="3"/>
+    <text x="56" y="146" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="20" font-weight="600" fill="#A6CDE8" text-anchor="start">01</text>
+    <text x="94" y="150" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei','Noto Sans CJK SC','Source Han Sans SC',sans-serif" font-size="34" font-weight="700" fill="#F2F0E8" text-anchor="start">打轴</text>
+    <text x="56" y="196" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei','Noto Sans CJK SC','Source Han Sans SC',sans-serif" font-size="20" font-weight="400" fill="#969AAA" text-anchor="start">人声分离 + 强制对齐</text>
+    <text x="56" y="226" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei','Noto Sans CJK SC','Source Han Sans SC',sans-serif" font-size="20" font-weight="400" fill="#969AAA" text-anchor="start">得到每个字的时间</text>
+  </g>
+<g id="stage-02">
+    <circle cx="344" cy="88" r="8" fill="#12141A" stroke="#A6CDE8" stroke-width="3"/>
+    <text x="336" y="146" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="20" font-weight="600" fill="#A6CDE8" text-anchor="start">02</text>
+    <text x="374" y="150" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei','Noto Sans CJK SC','Source Han Sans SC',sans-serif" font-size="34" font-weight="700" fill="#F2F0E8" text-anchor="start">自检</text>
+    <text x="336" y="196" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei','Noto Sans CJK SC','Source Han Sans SC',sans-serif" font-size="20" font-weight="400" fill="#969AAA" text-anchor="start">听写核对歌词版本</text>
+    <text x="336" y="226" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei','Noto Sans CJK SC','Source Han Sans SC',sans-serif" font-size="20" font-weight="400" fill="#969AAA" text-anchor="start">读音：来源→上下文→录音</text>
+  </g>
+<g id="stage-03">
+    <circle cx="624" cy="88" r="8" fill="#12141A" stroke="#E8B86D" stroke-width="3"/>
+    <text x="616" y="146" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="20" font-weight="600" fill="#E8B86D" text-anchor="start">03</text>
+    <text x="654" y="150" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei','Noto Sans CJK SC','Source Han Sans SC',sans-serif" font-size="34" font-weight="700" fill="#F2F0E8" text-anchor="start">复查</text>
+    <text x="616" y="196" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei','Noto Sans CJK SC','Source Han Sans SC',sans-serif" font-size="20" font-weight="400" fill="#969AAA" text-anchor="start">只标出可疑的歌和行</text>
+    <text x="616" y="226" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei','Noto Sans CJK SC','Source Han Sans SC',sans-serif" font-size="20" font-weight="400" fill="#969AAA" text-anchor="start">人微调、写备注、点通过</text>
+  </g>
+<g id="stage-04">
+    <circle cx="904" cy="88" r="8" fill="#12141A" stroke="#A6CDE8" stroke-width="3"/>
+    <text x="896" y="146" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="20" font-weight="600" fill="#A6CDE8" text-anchor="start">04</text>
+    <text x="934" y="150" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei','Noto Sans CJK SC','Source Han Sans SC',sans-serif" font-size="34" font-weight="700" fill="#F2F0E8" text-anchor="start">写入</text>
+    <text x="896" y="196" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei','Noto Sans CJK SC','Source Han Sans SC',sans-serif" font-size="20" font-weight="400" fill="#969AAA" text-anchor="start">先备份，再写进文件标签</text>
+    <text x="896" y="226" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei','Noto Sans CJK SC','Source Han Sans SC',sans-serif" font-size="20" font-weight="400" fill="#969AAA" text-anchor="start">写完回读校验</text>
+  </g>
+</svg>
