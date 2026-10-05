@@ -1,0 +1,14 @@
+# this machine's paths
+lyric-kit.config.json
+# per-song data, backups, caches and model weights: never in this repository
+data/
+vendor/
+.venv*/
+__pycache__/
+node_modules/
+*.mp3
+*.flac
+*.m4a
+*.wav
+*.pt
+*.ckpt

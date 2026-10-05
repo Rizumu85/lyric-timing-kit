@@ -1,0 +1,6 @@
+# Recognition environment (.venv-asr), kept apart because its torch/transformers pins differ.
+# Used by transcribe_song.py (Qwen3-ASR), transcribe_zh.py (FireRedASR2-AED) and video_timing.py.
+qwen-asr
+librosa
+soundfile
+numpy

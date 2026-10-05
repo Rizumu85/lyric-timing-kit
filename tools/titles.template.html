@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>歌名翻译</title>
+<style>
+  :root { --bg: #f5f2ed; --panel: #fffdfa; --ink: #211c17; --muted: #7b7168; --line: #e5ded5; --accent: #b4481d; --accent-soft: #fbe8dc; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #141211; --panel: #1b1917; --ink: #ede7df; --muted: #a0968c; --line: #2f2a26; --accent: #f08a5b; --accent-soft: #3a2519; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 "Segoe UI", system-ui, "Microsoft YaHei", sans-serif; }
+  header { position: sticky; top: 0; z-index: 2; padding: 16px clamp(16px, 4vw, 40px); background: var(--panel); border-bottom: 1px solid var(--line); }
+  h1 { margin: 0; font-size: 19px; }
+  header p { margin: 4px 0 10px; color: var(--muted); font-size: 13.5px; }
+  .bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  button, input { font: inherit; color: inherit; }
+  .bar button { padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg); cursor: pointer; }
+  .bar button[aria-pressed="true"] { background: var(--accent-soft); border-color: transparent; color: var(--accent); }
+  #count { margin-left: auto; color: var(--muted); font-size: 13.5px; }
+  main { max-width: 980px; margin: 0 auto; padding: 12px clamp(16px, 4vw, 40px) 60px; }
+  .row { display: grid; grid-template-columns: 46px minmax(0, 1.2fr) minmax(0, 1fr); gap: 12px; align-items: center; padding: 9px 10px; border-radius: 12px; }
+  .row:hover { background: var(--panel); }
+  .row.off .name, .row.off input[type=text] { opacity: .45; }
+  .switch { position: relative; width: 40px; height: 24px; }
+  .switch input { position: absolute; inset: 0; opacity: 0; cursor: pointer; margin: 0; }
+  .switch span { position: absolute; inset: 0; border-radius: 999px; background: var(--line); transition: background .12s; pointer-events: none; }
+  .switch span::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--panel); transition: transform .12s; }
+  .switch input:checked + span { background: var(--accent); }
+  .switch input:checked + span::after { transform: translateX(16px); }
+  .switch input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .name { overflow-wrap: anywhere; }
+  .name small { display: block; color: var(--muted); font-size: 12.5px; }
+  input[type=text] { width: 100%; padding: 7px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); }
+  input[type=text]:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  input[type=text]::placeholder { color: var(--muted); }
+  .picks { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 5px; }
+  .picks button { padding: 2px 10px; border: 1px solid var(--line); border-radius: 999px; background: none; color: var(--muted); font-size: 12.5px; cursor: pointer; }
+  .picks button:hover { border-color: var(--accent); color: var(--accent); }
+  .hidden { display: none; }
+  @media (max-width: 640px) { .row { grid-template-columns: 46px minmax(0, 1fr); } .row .field { grid-column: 2; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>歌名翻译：哪些要加</h1>
+  <p>打开开关表示这首要加 [翻译]；右边是要写进方括号的内容，可以直接改。预填的是网易云上的译名，空着的是没查到的；输入框下面的小按钮可以一键换成中文译名或外语原词。改动会自动保存，选完在聊天里说一声即可。</p>
+  <div class="bar">
+    <button data-filter="all" aria-pressed="true">全部</button>
+    <button data-filter="on" aria-pressed="false">要翻译的</button>
+    <button data-filter="empty" aria-pressed="false">要翻译但还没填的</button>
+    <button id="all-off">全部关掉</button>
+    <button id="all-on">有译名的全部打开</button>
+    <span id="count"></span>
+  </div>
+</header>
+<main id="list"></main>
+<script>
+const ROWS = __DATA__;
+if (!ROWS.length) setTimeout(() => document.getElementById('list').innerHTML ='<p style="padding:32px 0;text-align:center;opacity:.6">没有新的歌名要看。之前选过的都已经处理完了。</p>');
+const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+let filter = 'all', timer = 0;
+function save() {
+  clearTimeout(timer);
+  timer = setTimeout(() => fetch('/titles', { method: 'PUT', body: JSON.stringify(ROWS.map(row => ({ file: row.file, on: row.on, text: row.text }))) }).catch(() => {}), 300);
+}
+function count() {
+  const on = ROWS.filter(row => row.on);
+  document.getElementById('count').textContent = `${ROWS.length} 首 · 要翻译 ${on.length} 首 · 其中 ${on.filter(row => !row.text.trim()).length} 首还没填`;
+}
+function render() {
+  document.getElementById('list').innerHTML = ROWS.map((row, index) => {
+    const hide = (filter === 'on' && !row.on) || (filter === 'empty' && !(row.on && !row.text.trim()));
+    const [artist, ...rest] = row.file.split(' - ');
+    return `<div class="row${row.on ? '' : ' off'}${hide ? ' hidden' : ''}" data-i="${index}">
+      <label class="switch" title="要不要给这首加翻译"><input type="checkbox" ${row.on ? 'checked' : ''} aria-label="${esc(row.file)} 要加翻译"><span></span></label>
+      <div class="name" lang="ja">${esc(rest.join(' - ') || row.file)}<small>${esc(artist)}</small></div>
+      <div class="field"><input type="text" value="${esc(row.text)}" placeholder="${row.found ? '网易云没有译名' : '网易云没搜到这首'}" aria-label="${esc(row.file)} 的翻译">${row.chinese || row.original ? `<div class="picks">${row.chinese ? `<button data-pick="${esc(row.chinese)}" title="网易云上的中文译名">中文：${esc(row.chinese)}</button>` : ''}${row.original ? `<button data-pick="${esc(row.original)}" title="片假名对应的外语原词">原词：${esc(row.original)}</button>` : ''}</div>` : ''}</div>
+    </div>`;
+  }).join('');
+  count();
+}
+document.getElementById('list').addEventListener('change', event => {
+  const row = ROWS[event.target.closest('.row').dataset.i];
+  if (event.target.type === 'checkbox') { row.on = event.target.checked; event.target.closest('.row').classList.toggle('off', !row.on); }
+  count(); save();
+});
+document.getElementById('list').addEventListener('input', event => {
+  if (event.target.type !== 'text') return;
+  ROWS[event.target.closest('.row').dataset.i].text = event.target.value;
+  count(); save();
+});
+document.getElementById('list').addEventListener('click', event => {
+  const pick = event.target.closest('[data-pick]');
+  if (!pick) return;
+  const node = pick.closest('.row'), row = ROWS[node.dataset.i];
+  row.text = pick.dataset.pick; row.on = true;
+  node.querySelector('input[type=text]').value = row.text; node.querySelector('input[type=checkbox]').checked = true; node.classList.remove('off');
+  count(); save();
+});
+document.querySelector('.bar').addEventListener('click', event => {
+  const button = event.target.closest('button');
+  if (!button) return;
+  if (button.dataset.filter) {
+    filter = button.dataset.filter;
+    document.querySelectorAll('[data-filter]').forEach(node => node.setAttribute('aria-pressed', String(node === button)));
+  } else if (button.id === 'all-off') { ROWS.forEach(row => { row.on = false; }); save(); }
+  else if (button.id === 'all-on') { ROWS.forEach(row => { row.on = !!row.text.trim(); }); save(); }
+  render();
+});
+render();
+</script>
+</body>
+</html>

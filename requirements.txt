@@ -1,0 +1,19 @@
+# Alignment environment (.venv). Install torch/torchaudio for your CUDA version first:
+#   pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu128
+demucs==4.1.0
+transformers==4.57.6
+huggingface-hub
+librosa==0.11.0
+soundfile
+safetensors
+janome==0.5.0
+pykakasi==2.3.0
+jaconv
+romkan
+uroman
+pypinyin
+opencc
+mutagen
+numpy<2
+# optional: BS-RoFormer vocal separation (prepare_emission.py)
+# audio-separator

@@ -1,0 +1,496 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>歌词试听</title>
+<style>
+  :root {
+    --bg: #f5f2ed; --panel: #fffdfa; --raised: #ffffff; --ink: #211c17; --muted: #7b7168; --faint: #a59b91;
+    --line: #e5ded5; --accent: #b4481d; --accent-soft: #fbe8dc; --mark: #2c7a72; --mark-soft: #dcefec; --warn: #9a6a12; --warn-soft: #fbf0d3;
+    --shadow: 0 10px 30px rgba(60, 40, 20, .08);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141211; --panel: #1b1917; --raised: #23201d; --ink: #ede7df; --muted: #a0968c; --faint: #6f675f;
+      --line: #2f2a26; --accent: #f08a5b; --accent-soft: #3a2519; --mark: #6fc3b9; --mark-soft: #1c3431; --warn: #e2b458; --warn-soft: #3a2f16;
+      --shadow: 0 10px 30px rgba(0, 0, 0, .4);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.55 "Segoe UI", system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    display: grid; grid-template-columns: 312px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; overflow: hidden;
+  }
+  button, input { font: inherit; color: inherit; }
+  button { cursor: pointer; border: 0; background: none; padding: 0; }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* Song list */
+  aside { grid-row: 1; display: flex; flex-direction: column; min-height: 0; background: var(--panel); border-right: 1px solid var(--line); }
+  .brand { padding: 18px 18px 10px; }
+  .brand h1 { margin: 0; font-size: 17px; letter-spacing: .02em; }
+  .brand p { margin: 2px 0 0; color: var(--muted); font-size: 12.5px; }
+  .search { margin: 4px 14px 8px; }
+  .search input { width: 100%; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--raised); }
+  .search input::placeholder { color: var(--faint); }
+  #songs { flex: 1; overflow-y: auto; padding: 0 8px 14px; scrollbar-width: thin; }
+  .group { position: sticky; top: 0; z-index: 1; display: flex; justify-content: space-between; padding: 12px 10px 6px; background: var(--panel); color: var(--muted); font-size: 12px; letter-spacing: .06em; }
+  .song { display: block; width: 100%; text-align: left; padding: 8px 10px; border-radius: 10px; }
+  .song:hover { background: var(--raised); }
+  .song[aria-current="true"] { background: var(--accent-soft); }
+  .song .name { display: flex; gap: 6px; align-items: baseline; font-weight: 600; }
+  .song .name span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .song .sub { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; color: var(--muted); font-size: 12.5px; }
+  .song.heard .name, .song.heard .sub { color: var(--faint); font-weight: 500; }
+  .tick { color: var(--mark); font-size: 12px; flex: none; }
+  .tag { padding: 0 7px; border-radius: 999px; background: var(--raised); border: 1px solid var(--line); font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+  .tag.warn { background: var(--warn-soft); border-color: transparent; color: var(--warn); }
+  .tag.mark { background: var(--mark-soft); border-color: transparent; color: var(--mark); }
+
+  /* Current song */
+  main { grid-row: 1; min-width: 0; overflow-y: auto; scrollbar-width: thin; }
+  .inner { max-width: 860px; margin: 0 auto; padding: 26px clamp(18px, 4vw, 44px) 40px; }
+  .head { display: flex; gap: 14px; align-items: flex-start; justify-content: space-between; }
+  .head h2 { margin: 0; font-size: 24px; line-height: 1.3; }
+  .head .artist { color: var(--muted); margin-top: 2px; }
+  .meta { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .heard-btn { flex: none; padding: 7px 13px; border: 1px solid var(--line); border-radius: 999px; background: var(--raised); color: var(--muted); font-size: 13px; }
+  .end-bar { display: flex; justify-content: center; padding: 28px 0 56px; }
+  .end-bar .heard-btn { padding: 10px 26px; font-size: 14px; }
+  .heard-btn[aria-pressed="true"] { border-color: transparent; background: var(--mark-soft); color: var(--mark); }
+  .note.pattern { margin-top: 10px; }
+  .note { margin: 16px 0 0; padding: 12px 14px; border-radius: 12px; background: var(--raised); border: 1px solid var(--line); }
+  .note b { display: block; font-size: 12px; letter-spacing: .06em; color: var(--muted); margin-bottom: 2px; }
+  .focus { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .focus button { padding: 6px 12px; border-radius: 999px; background: var(--mark-soft); color: var(--mark); font-size: 13.5px; font-weight: 600; }
+  .focus button:hover { filter: brightness(.96); }
+  details.checks { margin-top: 10px; color: var(--muted); font-size: 13px; }
+  details.checks summary { cursor: pointer; }
+  details.checks ul { margin: 6px 0 0; padding-left: 18px; }
+  #help { margin-top: 14px; padding: 12px 14px; border-radius: 12px; background: var(--warn-soft); color: var(--warn); }
+  #help label { display: inline-block; margin-top: 6px; padding: 6px 12px; border-radius: 999px; background: var(--panel); color: var(--ink); cursor: pointer; }
+  #help input { display: none; }
+  [hidden] { display: none !important; }
+
+  /* Lyric rows */
+  ol.lines { list-style: none; margin: 22px 0 0; padding: 0; }
+  .row { display: grid; grid-template-columns: 34px 78px minmax(0, 1fr) auto; gap: 10px; align-items: start; padding: 9px 10px; border-radius: 12px; border-left: 3px solid transparent; }
+  .row:hover { background: var(--raised); }
+  .row.active { background: var(--accent-soft); border-left-color: var(--accent); }
+  .row .no { padding-top: 7px; color: var(--faint); font-size: 12.5px; text-align: right; border-radius: 6px; }
+  .row .no:hover { color: var(--accent); }
+  .time { margin-top: 3px; padding: 3px 0; width: 78px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); color: var(--muted); font-size: 13px; text-align: center; }
+  .time:hover { border-color: var(--accent); color: var(--accent); }
+  .orig { margin: 0; font-size: 19px; line-height: 2; font-family: "Segoe UI", "Yu Gothic UI", "Hiragino Sans", "PingFang SC", "Microsoft YaHei", sans-serif; overflow-wrap: anywhere; }
+  .orig rt { font-size: .5em; color: var(--muted); user-select: none; }
+  .w { transition: color .08s linear; white-space: pre-wrap; }
+  .row.active .w.sung, .row.active .w.sung rt { color: var(--accent); }
+  .tr { margin: -2px 0 0; color: var(--muted); font-size: 14px; }
+  .tr.alt { margin-top: 2px; color: var(--faint); }
+  .tr.alt b { margin-right: 6px; font-weight: 500; font-size: 11.5px; }
+  .tr.alt i { display: block; font-size: 12px; font-style: normal; color: var(--warn); }
+  .tr.none { color: var(--faint); font-size: 12.5px; }
+  .memo { margin-top: 4px; }
+  .memo-add { padding: 1px 9px; border: 1px dashed var(--line); border-radius: 999px; color: var(--faint); font-size: 12.5px; visibility: hidden; }
+  .row:hover .memo-add, .row.active .memo-add { visibility: visible; }
+  .memo-add:hover { border-color: var(--accent); color: var(--accent); }
+  .memo-text { padding: 2px 10px; border-radius: 10px; background: var(--mark-soft); color: var(--mark); font-size: 13px; text-align: left; }
+  .memo-input { width: min(100%, 460px); padding: 5px 10px; border: 1px solid var(--accent); border-radius: 9px; background: var(--panel); font-size: 13.5px; }
+  .flag.soft { background: transparent; border: 1px dashed var(--warn); padding: 0 8px; }
+  .row.nr .orig rt { color: var(--warn); }
+  .flag { display: inline-block; margin-top: 4px; padding: 1px 9px; border-radius: 999px; background: var(--warn-soft); color: var(--warn); font-size: 12.5px; }
+  .old { margin-top: 3px; padding: 3px 10px; border: 1px dashed var(--line); border-radius: 999px; color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+  .pair { display: inline-flex; gap: 4px; align-items: center; }
+  .old.use { padding: 3px 8px; border-style: solid; }
+  .old.vid { border-style: solid; border-color: var(--mark); color: var(--mark); }
+  .old:hover { border-color: var(--accent); color: var(--accent); }
+  .empty { padding: 60px 0; text-align: center; color: var(--muted); }
+  .side { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
+  .tune { display: flex; gap: 4px; align-items: center; margin-top: 3px; visibility: hidden; }
+  .row:hover .tune, .row.active .tune, .row.edited .tune { visibility: visible; }
+  .tune button, .whole button { min-width: 30px; height: 28px; padding: 0 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--muted); font-size: 13px; }
+  .tune button:hover, .whole button:hover { border-color: var(--accent); color: var(--accent); }
+  .tune .delta { border-color: transparent; background: var(--accent-soft); color: var(--accent); }
+  .tune .delta:empty { display: none; }
+  .row.edited .time { border-color: var(--accent); color: var(--accent); }
+  .whole { display: flex; gap: 6px; align-items: center; margin-top: 12px; color: var(--muted); font-size: 13px; flex-wrap: wrap; }
+  .whole b { color: var(--accent); font-weight: 600; }
+  kbd { padding: 0 5px; border: 1px solid var(--line); border-radius: 5px; background: var(--raised); font: inherit; font-size: 12px; }
+
+  /* Player */
+  footer { grid-column: 1 / -1; display: grid; grid-template-columns: auto auto minmax(120px, 1fr) auto; gap: 14px; align-items: center; padding: 12px 18px; background: var(--panel); border-top: 1px solid var(--line); box-shadow: var(--shadow); }
+  .play { width: 44px; height: 44px; border-radius: 50%; background: var(--accent); color: #fff; display: grid; place-items: center; }
+  .play svg { width: 18px; height: 18px; fill: currentColor; }
+  .clock { color: var(--muted); font-size: 13.5px; min-width: 132px; }
+  .clock b { color: var(--ink); font-weight: 600; }
+  #bar { position: relative; height: 26px; cursor: pointer; touch-action: none; }
+  #bar::before { content: ""; position: absolute; left: 0; right: 0; top: 11px; height: 4px; border-radius: 2px; background: var(--line); }
+  #fill { position: absolute; left: 0; top: 11px; height: 4px; border-radius: 2px; background: var(--accent); width: 0; }
+  #knob { position: absolute; top: 6px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--accent); left: 0; }
+  .spot { position: absolute; top: 9px; height: 8px; border-radius: 4px; background: var(--mark); opacity: .55; min-width: 4px; pointer-events: none; }
+  .tools { display: flex; gap: 8px; align-items: center; }
+  .chip { padding: 6px 11px; border: 1px solid var(--line); border-radius: 999px; background: var(--raised); color: var(--muted); font-size: 13px; white-space: nowrap; }
+  .chip[aria-pressed="true"] { border-color: transparent; background: var(--accent-soft); color: var(--accent); }
+  .vol { display: flex; gap: 6px; align-items: center; color: var(--muted); font-size: 13px; }
+  .vol input { width: 90px; accent-color: var(--accent); }
+  #toast { position: fixed; left: 50%; bottom: 86px; transform: translateX(-50%); padding: 8px 14px; border-radius: 999px; background: var(--ink); color: var(--bg); font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .15s; max-width: 90vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #toast.show { opacity: 1; }
+  .menu { display: none; }
+
+  @media (max-width: 820px) {
+    body { grid-template-columns: minmax(0, 1fr); }
+    aside { position: fixed; inset: 0 auto 0 0; width: min(86vw, 320px); z-index: 5; transform: translateX(-100%); transition: transform .18s; box-shadow: var(--shadow); }
+    body.open aside { transform: none; }
+    .menu { display: inline-block; margin-bottom: 12px; }
+    footer { grid-template-columns: auto minmax(0, 1fr); row-gap: 6px; padding: 10px 14px; }
+    .clock { grid-column: 2; min-width: 0; }
+    #bar { grid-column: 1 / -1; grid-row: 2; }
+    .tools { grid-column: 1 / -1; flex-wrap: wrap; }
+    .row { grid-template-columns: 26px 70px minmax(0, 1fr); }
+    .row .old { grid-column: 3; justify-self: start; }
+    .time { width: 70px; }
+    .orig { font-size: 17px; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<aside>
+  <div class="brand">
+    <h1>歌词试听</h1>
+    <p id="summary"></p>
+  </div>
+  <div class="search"><input id="search" type="search" placeholder="搜索歌名或歌手" aria-label="搜索歌名或歌手"></div>
+  <nav id="songs" aria-label="待试听的歌曲"></nav>
+</aside>
+
+<main id="main"><div class="inner" id="view"></div></main>
+
+<footer>
+  <button class="play" id="play" aria-label="播放或暂停"><svg viewBox="0 0 24 24" id="play-icon"><path d="M7 4v16l13-8z"/></svg></button>
+  <div class="clock num"><b id="now">00:00.00</b> / <span id="total">00:00</span></div>
+  <div id="bar" role="slider" aria-label="播放进度" tabindex="0"><div id="fill"></div><div id="spots"></div><div id="knob"></div></div>
+  <div class="tools">
+    <button class="chip" id="preroll" aria-pressed="true" title="点击某一行时，从它前面 1 秒开始播，方便听句首准不准">提前 1 秒</button>
+    <button class="chip" id="follow" aria-pressed="false" title="播放时让当前行保持在画面里">跟随滚动</button>
+    <button class="chip num" id="speed" title="切换播放速度">1×</button>
+    <label class="vol">音量<input id="volume" type="range" min="0" max="1" step="0.01" aria-label="音量"></label>
+  </div>
+</footer>
+<audio id="audio" preload="metadata"></audio>
+<div id="toast" role="status"></div>
+
+<script>
+const DATA = __DATA__;
+const songs = DATA.songs;
+const $ = selector => document.querySelector(selector);
+const audio = $('#audio');
+const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const clock = (seconds, precise = true) => {
+  const total = Math.max(0, seconds || 0), minutes = Math.floor(total / 60), rest = total - minutes * 60;
+  return String(minutes).padStart(2, '0') + ':' + (precise ? rest.toFixed(2).padStart(5, '0') : String(Math.floor(rest)).padStart(2, '0'));
+};
+const store = {
+  get(key, fallback) { try { const raw = localStorage.getItem('lyrics-listen:' + key); return raw === null ? fallback : JSON.parse(raw); } catch { return fallback; } },
+  set(key, value) { try { localStorage.setItem('lyrics-listen:' + key, JSON.stringify(value)); } catch {} },
+};
+const fileUrl = file => 'file:///' + file.replace(/\\/g, '/').split('/').map((part, index) => index === 0 ? part : encodeURIComponent(part)).join('/');
+const KIND = { aligned: '逐字打轴草稿', dictated: '模型听写草稿' };
+const SPEEDS = [1, 0.75, 0.5];
+
+// The marks live on the server (heard-songs.json), so that a song sent back for another listen
+// loses its mark; the browser's own copy is only used when the page is opened as a file.
+const heard = new Set(location.protocol.startsWith('http') && DATA.heard ? DATA.heard : store.get('heard', []));
+const picked = new Map();
+let song = null, rows = [], active = -1, stopAt = null, frame = 0;
+
+// Manual timing adjustments. They are saved beside the draft and only work when the page
+// comes from the local server (listen.cmd), which is also what writes them to disk.
+const SERVED = location.protocol.startsWith('http');
+const STEP = 0.05;
+const cents = value => Math.round(value * 100) / 100;
+const signed = value => (value > 0 ? '+' : '−') + Math.abs(value).toFixed(2);
+const lineOff = index => (song.edits.g || 0) + (song.edits.l[index]?.d || 0);
+const lineStart = index => Math.max(0, song.lines[index].s + lineOff(index));
+function refreshRow(index) {
+  const row = rows[index], delta = song.edits.l[index]?.d || 0;
+  row.querySelector('.time').textContent = clock(lineStart(index));
+  row.classList.toggle('edited', !!delta);
+  const chip = row.querySelector('.delta');
+  if (chip) chip.textContent = delta ? signed(delta) + ' ×' : '';
+}
+function refreshWhole() {
+  const node = $('#whole-value');
+  if (node) node.textContent = song.edits.g ? signed(song.edits.g) + ' 秒' : '未调整';
+}
+// Notes for Claude on a single line (a wrong reading, a wrong word). Saved beside the draft.
+function memoHtml(index) {
+  const note = song.notes[index]?.n;
+  return note
+    ? `<button class="memo-text" data-memo-edit="${index}" title="点一下修改这条备注">备注：${esc(note)}</button>`
+    : `<button class="memo-add" data-memo-edit="${index}" title="给这一行留一条备注，比如哪个字的读音不对">＋ 备注</button>`;
+}
+function saveMemo(index, text) {
+  text = text.trim();
+  if (text) song.notes[index] = { t: song.lines[index].t, n: text }; else delete song.notes[index];
+  const box = document.querySelector(`[data-memo="${index}"]`);
+  if (box) box.innerHTML = memoHtml(index);
+  fetch('/notes/' + song.key, { method: 'PUT', body: JSON.stringify(song.notes) })
+    .then(response => { if (!response.ok) throw new Error(); })
+    .catch(() => toast('备注没有保存上：试听服务没在运行，重新打开 listen.cmd'));
+  renderList();
+}
+function saveEdits() {
+  fetch('/edits/' + song.key, { method: 'PUT', body: JSON.stringify(song.edits) })
+    .then(response => { if (!response.ok) throw new Error(); })
+    .catch(() => toast('没有保存上：试听服务没在运行，重新打开 listen.cmd'));
+}
+function setDelta(index, delta) {
+  delta = cents(delta);
+  if (delta) song.edits.l[index] = { d: delta, t: song.lines[index].t }; else delete song.edits.l[index];
+  refreshRow(index); saveEdits();
+}
+function nudge(index, step) { setDelta(index, (song.edits.l[index]?.d || 0) + step); stopAt = null; seek(lineStart(index), true); }
+function stamp(index) { setDelta(index, audio.currentTime - song.lines[index].s - (song.edits.g || 0)); paint(); }
+function nudgeWhole(step) {
+  song.edits.g = step ? cents((song.edits.g || 0) + step) : 0;
+  rows.forEach((_, index) => refreshRow(index)); refreshWhole(); saveEdits(); paint();
+}
+let preroll = store.get('preroll', true), follow = store.get('follow', false), speed = 1;
+
+function renderList() {
+  const query = $('#search').value.trim().toLowerCase();
+  const shown = songs.filter(item => !query || (item.file + ' ' + item.title).toLowerCase().includes(query));
+  const groups = [['先听这些', shown.filter(item => item.priority)], ['其余待复核', shown.filter(item => !item.priority && !item.written)], ['已写入 · 读音未核对', shown.filter(item => !item.priority && item.written)]];
+  $('#songs').innerHTML = groups.filter(([, list]) => list.length).map(([label, list]) =>
+    `<div class="group"><span>${label}</span><span class="num">${list.filter(item => heard.has(item.key)).length}/${list.length}</span></div>` +
+    list.map(item => `<button class="song${heard.has(item.key) ? ' heard' : ''}" data-key="${item.key}" aria-current="${item === song}">
+      <div class="name"><span>${esc(item.title)}</span>${heard.has(item.key) ? '<span class="tick">已通过</span>' : ''}</div>
+      <div class="sub"><span>${esc(item.artist)}</span>${item.kind === 'dictated' ? '<span class="tag mark">听写</span>' : ''}${Object.keys(item.notes || {}).length ? `<span class="tag mark">备注 ${Object.keys(item.notes).length}</span>` : ''}${item.tags.slice(0, 2).map(tag => `<span class="tag warn">${tag}</span>`).join('')}</div>
+    </button>`).join('')).join('') || '<div class="empty">没有匹配的歌曲</div>';
+  $('#summary').textContent = `${songs.filter(item => !item.written).length} 首待写入 · ${songs.filter(item => item.written).length} 首只需看读音 · 已通过 ${songs.filter(item => heard.has(item.key)).length} 首`;
+}
+
+function wordHtml(word) {
+  const body = word[3] ? word[3].map(([base, reading]) => reading ? `<ruby>${esc(base)}<rt>${esc(reading)}</rt></ruby>` : esc(base)).join('') : esc(word[0]);
+  return `<span class="w" data-s="${word[1]}">${body}</span>`;
+}
+
+function renderSong() {
+  if (!song) { $('#view').innerHTML = '<div class="empty">从左边选一首歌</div>'; return; }
+  const ruby = song.lines.reduce((count, line) => count + line.w.filter(word => word[3]).length, 0);
+  const meta = [KIND[song.kind], `${song.lines.length} 行`, ruby ? `${ruby} 处注音` : '', song.score != null ? `声学分数 ${song.score}` : '', song.written ? '已写入 MP3' : '未写入 MP3'].filter(Boolean);
+  $('#view').innerHTML = `
+    <button class="chip menu" id="menu">歌曲列表</button>
+    <div class="head">
+      <div><h2 lang="${esc(song.lang)}">${esc(song.title)}</h2><div class="artist">${esc(song.artist)}</div></div>
+      <button class="heard-btn" id="heard" data-heard aria-pressed="${heard.has(song.key)}">${heard.has(song.key) ? '已通过 ✓' : '通过'}</button>
+    </div>
+    <div class="meta">${meta.map(text => `<span class="tag">${esc(text)}</span>`).join('')}${song.tags.map(tag => `<span class="tag warn">${tag}</span>`).join('')}</div>
+    ${song.note ? `<div class="note"><b>这首要听什么</b>${esc(song.note)}${song.focus.length ? `<div class="focus">${song.focus.map((spot, index) => `<button data-spot="${index}">▶ ${esc(spot.label)} <span class="num">${clock(spot.s, false)}–${clock(spot.e, false)}</span></button>`).join('')}</div>` : ''}</div>` : ''}
+    ${song.shift != null ? `<div class="note pattern"><b>和旧轴的关系</b>${Math.abs(song.shift) < .15 ? '整首和旧轴基本一致' : `整首比旧轴统一${song.shift < 0 ? '早' : '晚'} ${Math.abs(song.shift).toFixed(2)} 秒`}。${song.lines.some(line => line.dev != null) ? `听一行确认这个规律，再看下面 ${song.lines.filter(line => line.dev != null).length} 行不符合规律的：<div class="focus">${song.lines.map((line, index) => line.dev == null ? '' : `<button data-seek="${Math.max(0, Math.min(line.s, line.exp) - 2)}">▶ 第 ${index + 1} 行 <span class="num">${line.dev > 0 ? '晚' : '早'} ${Math.abs(line.dev).toFixed(2)} 秒</span></button>`).join('')}</div>` : '没有不符合规律的行，听一行确认即可。'}</div>` : ''}
+    ${song.issues.length ? `<details class="checks"><summary>自动检查的提示（${song.issues.length}）</summary><ul>${song.issues.map(text => `<li>${esc(text)}</li>`).join('')}</ul></details>` : ''}
+    ${SERVED ? `<div class="whole num">整首一起移动
+        <button data-whole="${-STEP}" title="整首提前 0.05 秒">−</button><button data-whole="${STEP}" title="整首推后 0.05 秒">＋</button>
+        <b id="whole-value"></b><button data-whole="0" title="撤销整首的移动">还原</button>
+        ${song.lines.some(line => line.old != null) ? '<button id="all-old" title="每一行的开头都改回旧歌词里的时间（逐字高亮跟着整行移动）">整首用旧轴</button><button id="all-new" title="撤销所有行的微调，回到自动打轴的时间">整首用新轴</button>' : ''}
+        <span>· 当前行 <kbd>[</kbd> <kbd>]</kbd> 微调 · <kbd>Enter</kbd> 把下一行定在此刻</span></div>`
+      : '<div class="whole">想手动微调时间，请双击项目文件夹里的 listen.cmd 打开这个页面。</div>'}
+    <div id="help" hidden>浏览器读不到这首歌的音频文件。<br><label>选择 Music 文件夹<input id="folder" type="file" webkitdirectory multiple></label></div>
+    <ol class="lines">${song.lines.map((line, index) => `
+      <li class="row" data-i="${index}">
+        <button class="no num" data-copy="${index}" title="复制这一行的位置，粘贴到聊天里告诉我">${index + 1}</button>
+        <button class="time num" data-line="${index}">${clock(line.s)}</button>
+        <div>
+          <p class="orig" lang="${esc(song.lang === 'ja' ? 'ja' : 'zh-CN')}">${line.w.length ? line.w.map(wordHtml).join('') : esc(line.t)}</p>
+          ${line.tr ? `<p class="tr">${esc(line.tr)}</p>` : ''}
+          ${line.alt ? `<p class="tr alt"><b>${esc(line.alt[0])}</b>${esc(line.alt[1])}${line.alt[2] ? `<i>${esc(line.alt[2])}</i>` : ''}</p>` : ''}
+          ${line.flag ? `<span class="flag">${esc(line.flag)}</span>` : ''}
+          ${line.nr ? `<span class="flag soft" title="这一行的读音没有来源可以核对，而且录音听起来和现在标的读法不太一样">读音可疑：${esc(line.nr)}</span>` : ''}
+          ${SERVED ? `<div class="memo" data-memo="${index}">${memoHtml(index)}</div>` : ''}
+        </div>
+        <div class="side">
+          ${SERVED ? `<div class="tune num">
+            <button class="delta" data-reset="${index}" title="撤销这一行的微调"></button>
+            <button data-nudge="${-STEP}" data-i="${index}" title="这一行提前 0.05 秒（按住 Shift 是 0.5 秒）">−</button>
+            <button data-nudge="${STEP}" data-i="${index}" title="这一行推后 0.05 秒（按住 Shift 是 0.5 秒）">＋</button>
+            <button data-stamp="${index}" title="把这一行的开头定在现在播放到的位置">定在此刻</button>
+          </div>` : ''}
+          ${song.shift != null
+            ? (line.dev != null ? `<span class="flag">不符合规律：比其他行${line.dev > 0 ? '晚' : '早'} ${Math.abs(line.dev).toFixed(2)} 秒</span><span class="pair"><button class="old num" data-seek="${line.exp}" title="按其他行的规律，这一句应该在这里开始，点一下对比">按规律 ${clock(line.exp)}</button>${SERVED ? `<button class="old use" data-use="${line.exp}" data-i="${index}" title="这一行改到按规律推出的时间">用</button>` : ''}</span>` : '')
+            : line.old != null && Math.abs(line.old - line.s) >= 1 ? `<span class="pair"><button class="old num" data-seek="${line.old}" title="这一句在旧歌词里的时间，点一下对比">旧轴 ${clock(line.old)}</button>${SERVED ? `<button class="old use" data-use="${line.old}" data-i="${index}" title="这一行改用旧轴的时间">用</button>` : ''}</span>` : ''}
+          ${line.vid != null ? `<span class="pair"><button class="old vid num" data-seek="${line.vid}" title="卡拉 OK 视频里这一句开始变色的时间，点一下对比">视频 ${clock(line.vid)}</button>${SERVED ? `<button class="old vid use" data-use="${line.vid}" data-i="${index}" title="这一行改用视频的时间">用</button>` : ''}</span>` : ''}
+        </div>
+      </li>`).join('')}</ol>
+    <div class="end-bar"><button class="heard-btn" data-heard aria-pressed="${heard.has(song.key)}">${heard.has(song.key) ? '已通过 ✓' : '听完了，通过'}</button></div>`;
+  rows = [...document.querySelectorAll('.row')];
+  active = -1;
+  rows.forEach((_, index) => { if (lineOff(index)) refreshRow(index); });
+  refreshWhole();
+  $('#spots').innerHTML = song.focus.map(spot => `<div class="spot" style="left:${spot.s / song.duration * 100}%;width:${(spot.e - spot.s) / song.duration * 100}%"></div>`).join('');
+  $('#main').scrollTop = 0;
+}
+
+function select(key, autoplay = false) {
+  const next = songs.find(item => item.key === key);
+  if (!next || next === song) return;
+  song = next; stopAt = null;
+  store.set('last', key);
+  audio.src = picked.get(song.file.toLowerCase()) || (SERVED ? '/music/' + encodeURIComponent(song.file) : fileUrl(song.audio));
+  audio.playbackRate = speed;
+  renderList(); renderSong(); paint();
+  document.body.classList.remove('open');
+  if (autoplay) audio.play().catch(() => {});
+}
+
+function seek(seconds, lead = false) {
+  if (!song) return;
+  audio.currentTime = Math.max(0, seconds - (lead && preroll ? 1 : 0));
+  audio.play().catch(() => {});
+}
+
+function paint() {
+  const now = audio.currentTime || 0, total = audio.duration || song?.duration || 0;
+  $('#now').textContent = clock(now);
+  $('#total').textContent = clock(total, false);
+  const ratio = total ? Math.min(1, now / total) : 0;
+  $('#fill').style.width = $('#knob').style.left = ratio * 100 + '%';
+  if (!song) return;
+  let index = -1;
+  for (let i = 0; i < song.lines.length; i++) if (lineStart(i) <= now + 0.02) index = i;
+  if (index !== active) {
+    rows[active]?.classList.remove('active');
+    rows[active]?.querySelectorAll('.sung').forEach(node => node.classList.remove('sung'));
+    active = index;
+    const row = rows[active];
+    if (row) {
+      row.classList.add('active');
+      if (follow && !audio.paused) {
+        const box = $('#main'), top = row.offsetTop - box.clientHeight * 0.38;
+        box.scrollTo({ top, behavior: 'smooth' });
+      }
+    }
+  }
+  rows[active]?.querySelectorAll('.w').forEach(node => node.classList.toggle('sung', Number(node.dataset.s) + lineOff(active) <= now + 0.02));
+  if (stopAt != null && now >= stopAt) { stopAt = null; audio.pause(); }
+}
+function loop() { paint(); frame = audio.paused ? 0 : requestAnimationFrame(loop); }
+
+function toast(text) {
+  const node = $('#toast');
+  node.textContent = text; node.classList.add('show');
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => node.classList.remove('show'), 1800);
+}
+async function copy(text) {
+  try { await navigator.clipboard.writeText(text); }
+  catch {
+    const area = Object.assign(document.createElement('textarea'), { value: text });
+    document.body.append(area); area.select(); document.execCommand('copy'); area.remove();
+  }
+  toast('已复制：' + text);
+}
+function setChip(node, on) { node.setAttribute('aria-pressed', String(on)); }
+
+audio.addEventListener('play', () => { $('#play-icon').innerHTML = '<path d="M6 4h4v16H6zM14 4h4v16h-4z"/>'; if (!frame) loop(); });
+audio.addEventListener('pause', () => { $('#play-icon').innerHTML = '<path d="M7 4v16l13-8z"/>'; paint(); });
+audio.addEventListener('seeked', paint);
+audio.addEventListener('loadedmetadata', () => { const help = $('#help'); if (help) help.hidden = true; paint(); });
+audio.addEventListener('error', () => { const help = $('#help'); if (help) help.hidden = false; });
+
+document.addEventListener('click', event => {
+  const target = event.target.closest('button, .row');
+  if (!target) return;
+  if (target.dataset.key) return select(target.dataset.key);
+  if (target.id === 'menu') return document.body.classList.toggle('open');
+  if (target.dataset.heard !== undefined) {
+    heard.has(song.key) ? heard.delete(song.key) : heard.add(song.key);
+    store.set('heard', [...heard]);
+    // also kept on the server, so "the ones I have listened to" can be acted on from chat
+    if (SERVED) fetch('/heard', { method: 'PUT', body: JSON.stringify([...heard]) }).catch(() => {});
+    // the button under the title and the one after the last line show the same state
+    for (const button of document.querySelectorAll('[data-heard]')) { button.setAttribute('aria-pressed', heard.has(song.key)); button.textContent = heard.has(song.key) ? '已通过 ✓' : button.id === 'heard' ? '通过' : '听完了，通过'; }
+    return renderList();
+  }
+  if (target.dataset.spot) { const spot = song.focus[target.dataset.spot]; stopAt = spot.e; return seek(spot.s); }
+  if (target.dataset.memoEdit) {
+    const index = Number(target.dataset.memoEdit), box = document.querySelector(`[data-memo="${index}"]`);
+    box.innerHTML = `<input class="memo-input" data-memo-input="${index}" value="${esc(song.notes[index]?.n || '')}" placeholder="写给 Claude 的备注，回车保存，清空即删除">`;
+    const input = box.firstChild; input.focus(); input.select();
+    return;
+  }
+  if (target.dataset.copy) { const i = Number(target.dataset.copy), line = song.lines[i]; return copy(`《${song.title}》第 ${i + 1} 行 ${clock(lineStart(i))}「${line.t}」`); }
+  if (target.dataset.nudge) return nudge(Number(target.dataset.i), Number(target.dataset.nudge) * (event.shiftKey ? 10 : 1));
+  if (target.dataset.stamp) return stamp(Number(target.dataset.stamp));
+  if (target.dataset.use) { const index = Number(target.dataset.i); setDelta(index, Number(target.dataset.use) - song.lines[index].s - (song.edits.g || 0)); stopAt = null; return seek(lineStart(index), true); }
+  if (target.id === 'all-old' || target.id === 'all-new') {
+    const old = target.id === 'all-old';
+    if (!confirm(old ? '把这首歌每一行都改回旧轴的时间？（之后还能用“整首用新轴”撤销）' : '撤销这首歌所有行的微调，回到自动打轴的时间？')) return;
+    song.lines.forEach((line, index) => { const delta = old && line.old != null ? cents(line.old - line.s - (song.edits.g || 0)) : 0; if (delta) song.edits.l[index] = { d: delta, t: line.t }; else delete song.edits.l[index]; refreshRow(index); });
+    saveEdits(); paint(); return toast(old ? '整首已改用旧轴' : '整首已回到新轴');
+  }
+  if (target.dataset.reset) return setDelta(Number(target.dataset.reset), 0);
+  if (target.dataset.whole) return nudgeWhole(Number(target.dataset.whole));
+  if (target.dataset.line) { stopAt = null; return seek(lineStart(Number(target.dataset.line)), true); }
+  if (target.dataset.seek) { stopAt = null; return seek(Number(target.dataset.seek), true); }
+});
+document.addEventListener('change', event => {
+  if (event.target.id !== 'folder') return;
+  for (const file of event.target.files) picked.set(file.name.toLowerCase(), URL.createObjectURL(file));
+  const url = picked.get(song.file.toLowerCase());
+  if (url) { audio.src = url; audio.playbackRate = speed; } else toast('这个文件夹里没有找到这首歌');
+});
+
+$('#play').addEventListener('click', () => { stopAt = null; audio.paused ? audio.play().catch(() => {}) : audio.pause(); });
+$('#search').addEventListener('input', renderList);
+$('#preroll').addEventListener('click', event => { preroll = !preroll; store.set('preroll', preroll); setChip(event.currentTarget, preroll); });
+$('#follow').addEventListener('click', event => { follow = !follow; store.set('follow', follow); setChip(event.currentTarget, follow); });
+$('#speed').addEventListener('click', event => { speed = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length]; audio.playbackRate = speed; event.currentTarget.textContent = speed + '×'; });
+$('#volume').addEventListener('input', event => { audio.volume = Number(event.target.value); store.set('volume', audio.volume); });
+
+const bar = $('#bar');
+const scrub = event => {
+  const box = bar.getBoundingClientRect(), total = audio.duration || song?.duration || 0;
+  audio.currentTime = Math.min(1, Math.max(0, (event.clientX - box.left) / box.width)) * total;
+  paint();
+};
+bar.addEventListener('pointerdown', event => { stopAt = null; bar.setPointerCapture(event.pointerId); scrub(event); });
+bar.addEventListener('pointermove', event => { if (bar.hasPointerCapture(event.pointerId)) scrub(event); });
+
+document.addEventListener('keydown', event => {
+  if (event.target.dataset?.memoInput !== undefined) {
+    if (event.key === 'Enter') event.target.blur();
+    if (event.key === 'Escape') { event.target.dataset.cancel = '1'; event.target.blur(); }
+  }
+});
+document.addEventListener('focusout', event => {
+  const index = event.target.dataset?.memoInput;
+  if (index === undefined) return;
+  if (event.target.dataset.cancel) document.querySelector(`[data-memo="${index}"]`).innerHTML = memoHtml(Number(index));
+  else saveMemo(Number(index), event.target.value);
+});
+document.addEventListener('keydown', event => {
+  if (event.target.matches('input') || event.ctrlKey || event.metaKey || event.altKey || !song) return;
+  const step = { ArrowLeft: -3, ArrowRight: 3 }[event.key], move = { ArrowUp: -1, ArrowDown: 1 }[event.key];
+  if (event.key === ' ') { stopAt = null; audio.paused ? audio.play().catch(() => {}) : audio.pause(); }
+  else if (step) audio.currentTime = Math.max(0, audio.currentTime + step);
+  else if (move) { stopAt = null; seek(lineStart(Math.min(song.lines.length - 1, Math.max(0, active + move))), true); }
+  else if (SERVED && (event.key === '[' || event.key === ']') && active >= 0) nudge(active, event.key === '[' ? -STEP : STEP);
+  else if (SERVED && event.key === 'Enter' && active + 1 < song.lines.length) stamp(active + 1);
+  else return;
+  event.preventDefault();
+});
+
+audio.volume = store.get('volume', 0.8);
+$('#volume').value = audio.volume;
+setChip($('#preroll'), preroll); setChip($('#follow'), follow);
+renderList();
+const wanted = location.hash.slice(1) || store.get('last', '');
+select(songs.some(item => item.key === wanted) ? wanted : songs[0]?.key);
+if (!song) renderSong();
+</script>
+</body>
+</html>

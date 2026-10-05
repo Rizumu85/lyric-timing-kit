@@ -1,0 +1,9 @@
+{
+  "musicDir": "D:/Music",
+  "dataDir": "data",
+  "python": "",
+  "proxy": "",
+  "webBridge": "http://127.0.0.1:10086",
+  "reviewPort": 3417,
+  "singerAliases": {}
+}
