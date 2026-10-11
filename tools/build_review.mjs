@@ -100,7 +100,7 @@ function applyNotes(song, notes) {
   });
   for (const flag of notes.flags || []) {
     const targets = flag.line ? [song.lines[flag.line - 1]] : song.lines.filter(line => line.t.includes(flag.match));
-    for (const line of targets) if (line) line.flag = flag.text;
+    for (const line of targets) if (line) line.flag = line.noteFlag = flag.text;
   }
 }
 
@@ -271,6 +271,29 @@ if (stale.length) {
   const all = (await readJson(path.join(BATCH, 'heard-songs.json'))) || [];
   await fs.writeFile(path.join(BATCH, 'heard-songs.json'), JSON.stringify(all.filter(key => !stale.includes(key)), null, 2), 'utf8');
   await fs.writeFile(path.join(BATCH, 'heard-times.json'), JSON.stringify(Object.fromEntries(Object.entries(approvedAt).filter(([key]) => !stale.includes(key))), null, 2), 'utf8');
+}
+// A song brought back for one thing shows that one thing ("show" in review-notes.json):
+//   'note'    – the note, its spots and its line flags: a draft the user is asked to hear for a stated reason
+//   'pattern' – the same, plus how the lines sit against the old timing
+// What the user has already been through for the song is left out: reading doubts, the acoustic
+// check, the video comparison, the automatic checks, and for 'note' the old timing as well.
+const STATE_TAG = /^(MP3 里是旧版|有改动，待重听|播放时标记)$/;
+for (const song of songs) {
+  const show = notes[song.key]?.show;
+  for (const line of song.lines) {
+    if (show) {
+      if (line.noteFlag) line.flag = line.noteFlag; else delete line.flag;
+      delete line.nr; delete line.vid; delete line.alt;
+      if (show !== 'pattern') { delete line.dev; delete line.exp; delete line.old; }
+    }
+    delete line.noteFlag;
+  }
+  if (!show) continue;
+  song.only = show;
+  song.tags = song.tags.filter(tag => STATE_TAG.test(tag));
+  song.issues = [];
+  delete song.videoChecked;
+  if (show !== 'pattern') delete song.shift;
 }
 const data = JSON.stringify({ built: new Date().toISOString(), heard, songs }).replace(/</g, '\\u003c');
 const template = await fs.readFile(path.join(ROOT, 'review.template.html'), 'utf8');

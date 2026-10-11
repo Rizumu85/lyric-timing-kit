@@ -265,14 +265,14 @@ let preroll = store.get('preroll', true), follow = store.get('follow', false), s
 function renderList() {
   const query = $('#search').value.trim().toLowerCase();
   const shown = songs.filter(item => !query || (item.file + ' ' + item.title).toLowerCase().includes(query));
-  const groups = [['先听这些', shown.filter(item => item.priority)], ['其余待复核', shown.filter(item => !item.priority && !item.written)], ['已写入 · 读音未核对', shown.filter(item => !item.priority && item.written)]];
+  const groups = [['先听这些', shown.filter(item => item.priority)], ['其余待复核', shown.filter(item => !item.priority && !item.written)], ['已写入 · 待复查', shown.filter(item => !item.priority && item.written)]];
   $('#songs').innerHTML = groups.filter(([, list]) => list.length).map(([label, list]) =>
     `<div class="group"><span>${label}</span><span class="num">${list.filter(item => heard.has(item.key)).length}/${list.length}</span></div>` +
     list.map(item => `<button class="song${heard.has(item.key) ? ' heard' : ''}" data-key="${item.key}" aria-current="${item === song}">
       <div class="name"><span>${esc(item.title)}</span>${heard.has(item.key) ? '<span class="tick">已通过</span>' : ''}</div>
       <div class="sub"><span>${esc(item.artist)}</span>${item.kind === 'dictated' ? '<span class="tag mark">听写</span>' : ''}${Object.keys(item.notes || {}).length ? `<span class="tag mark">备注 ${Object.keys(item.notes).length}</span>` : ''}${item.tags.slice(0, 2).map(tag => `<span class="tag warn">${tag}</span>`).join('')}</div>
     </button>`).join('')).join('') || '<div class="empty">没有匹配的歌曲</div>';
-  $('#summary').textContent = `${songs.filter(item => !item.written).length} 首待写入 · ${songs.filter(item => item.written).length} 首只需看读音 · 已通过 ${songs.filter(item => heard.has(item.key)).length} 首`;
+  $('#summary').textContent = `${songs.filter(item => !item.written).length} 首待写入 · ${songs.filter(item => item.written).length} 首已写入、放回来复查 · 已通过 ${songs.filter(item => heard.has(item.key)).length} 首`;
 }
 
 function wordHtml(word) {
