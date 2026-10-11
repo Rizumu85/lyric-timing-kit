@@ -50,8 +50,16 @@ for (const key of process.argv.slice(2).filter(arg => arg !== '--rerun')) {
     const flags = await readJson(flagsFile).catch(() => null);
     if (flags?.some(flag => flag.key === key)) await writeJson(flagsFile, flags.filter(flag => flag.key !== key));
   }
+  // ... and so is a song that review-notes.json brought back for another listen ("recheck")
+  if (!rerun) {
+    const notesFile = path.join(BATCH, 'review-notes.json');
+    const notes = await readJson(notesFile).catch(() => null);
+    if (notes?.[key]?.recheck) { delete notes[key].recheck; await writeJson(notesFile, notes); }
+  }
   delete result.wasStatus;
   if (!rerun) result.confirmed = true; // the user listened to this one
+  // ... on the review page, which shows how the lines sit against the old timing
+  if (!rerun) result.patternReviewed = true;
   result.backup = validation.backupPath;
   result.issues = result.issues.filter(issue => !/holdEmbedding|尚未写回|未写回 MP3/.test(issue)).concat(rerun ? '核对读音后重新对齐并写入 MP3' : '试听确认后写入 MP3');
   await writeJson(path.join(folder, 'result.json'), result);

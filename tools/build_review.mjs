@@ -65,8 +65,9 @@ function fromQwen(draft) {
 // The old timing is often right apart from one constant shift (the lyric sheet was timed to
 // another upload of the same recording). When most lines follow such a shift, hearing one line
 // confirms it, and only the lines that break the pattern need a look: those get `dev`, how far
-// they sit from where the pattern puts them.
-function offsetPattern(song) {
+// they sit from where the pattern puts them. Lines the user placed by hand (`settled`) are theirs
+// and are not reported.
+function offsetPattern(song, settled = new Set()) {
   const offsets = song.lines.map(line => line.old == null ? null : line.s - line.old), known = offsets.filter(value => value != null);
   if (known.length < 8) return;
   const median = values => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)];
@@ -77,7 +78,7 @@ function offsetPattern(song) {
   song.lines.forEach((line, index) => {
     if (offsets[index] == null) return;
     line.exp = round(line.old + shift);
-    if (Math.abs(offsets[index] - shift) > limit) line.dev = round(offsets[index] - shift);
+    if (Math.abs(offsets[index] - shift) > limit && !settled.has(index)) line.dev = round(offsets[index] - shift);
   });
 }
 
@@ -194,7 +195,9 @@ for (const entry of await fs.readdir(BATCH, { withFileTypes: true })) {
     const starts = [...new Set([...lrc.matchAll(/^\[(\d+):(\d+)\.(\d+)\]/gm)].map(m => round(Number(m[1]) * 60 + Number(m[2]) + Number(m[3]) / 100 + 0.05)))];
     if (starts.length === song.lines.length) song.lines.forEach((line, index) => { line.old = starts[index]; });
   }
-  offsetPattern(song);
+  // the manual adjustments already written into this draft (embed_confirmed.mjs keeps the last set)
+  const placed = (await readJson(path.join(folder, 'timing-edits.applied.json')))?.l || {};
+  offsetPattern(song, new Set(Object.keys(placed).filter(index => placed[index].d && song.lines[index]?.t === placed[index].t).map(Number)));
   // mark the lines nothing vouches for, so only those need a look
   if (fia && loose.length && song.lines.length === source.rows.length) for (const index of loose) song.lines[index].nr = doubts.get(index).join('；');
   applyNotes(song, notes[entry.name] || {});
