@@ -42,14 +42,13 @@ export default function activate(folium) {
     keywords: ['复查', '审查', '歌词', '问题', '打轴', 'review', 'flag', 'lyrics'],
     run: flagForReview,
   });
-  // A small flag beside the progress bar. Folia shows it on each of its progress bars, except the
-  // collapsed capsule, which is too narrow. One click sends the song and says what happened.
-  // It is not drawn for songs that are not local files, which cannot be sent.
+  // A small flag beside the progress bar, on each of Folia's progress bars, the collapsed capsule
+  // included: that is the one on screen most of the time. One click sends the song and says what
+  // happened. It is not drawn for songs that are not local files, which cannot be sent.
   folium.registries.controlButtons?.register({
     id: 'flag',
     slot: 'progress.trailing',
     order: 520,
-    hideWhenCollapsed: true,
     mount: container => {
       const style = document.createElement('style');
       style.textContent = `
