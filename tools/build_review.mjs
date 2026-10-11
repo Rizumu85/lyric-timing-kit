@@ -84,6 +84,7 @@ function offsetPattern(song, settled = new Set()) {
 
 function applyNotes(song, notes) {
   song.priority = !!notes.priority;
+  song.first = !!notes.first; // leads the list: what the user was just asked to listen to
   song.note = notes.note || '';
   // "moved": the lines that sit more than a second away from where the MP3 has them now.
   if (notes.focus === 'moved') {
@@ -250,7 +251,7 @@ for (const twin of songs.filter(song => song.key.endsWith('-rf'))) {
   Object.assign(twin, { priority: true, focus: spots('twin'), tags: ['新分离模型'], note: '对比试验：同一份歌词，换用新的人声分离模型（BS-RoFormer）后重新打轴的版本。只是草稿，不会写入 MP3。' });
   order.push(original.key, twin.key);
 }
-songs.sort((a, b) => (b.priority - a.priority)
+songs.sort((a, b) => (b.priority - a.priority) || (!!b.first - !!a.first)
   || (a.priority ? order.indexOf(a.key) - order.indexOf(b.key) : a.file.localeCompare(b.file, 'zh')));
 
 const onPage = new Set(songs.map(song => song.key));
