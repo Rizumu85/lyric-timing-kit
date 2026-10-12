@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { embedSong } from './batch_embed.mjs';
-import { applyTimingEdits } from './timing_edits.mjs';
+import { applyTimingEdits, mergeApplied } from './timing_edits.mjs';
 import { addHangulRuby } from './hangul_ruby.mjs';
 import { BATCH, BACKUPS } from './kit-config.mjs';
 
@@ -27,7 +27,9 @@ for (const key of process.argv.slice(2).filter(arg => arg !== '--rerun')) {
     const doc = await readJson(path.join(folder, 'aligned.fia'));
     const changed = applyTimingEdits(doc, edits);
     await writeJson(path.join(folder, 'aligned.fia'), doc);
-    await fs.rename(editsFile, path.join(folder, 'timing-edits.applied.json'));
+    const appliedFile = path.join(folder, 'timing-edits.applied.json');
+    await writeJson(appliedFile, mergeApplied(await readJson(appliedFile).catch(() => null), edits));
+    await fs.rm(editsFile);
     console.log(`${source.name}: 套用了 ${changed} 行手动微调`);
   }
   // Korean words get their romanization as ruby, like furigana over kanji.

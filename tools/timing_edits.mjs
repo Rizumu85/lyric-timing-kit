@@ -18,3 +18,11 @@ export function applyTimingEdits(doc, edits) {
   });
   return changed;
 }
+
+// The record of every line the user has placed by hand, kept next to the draft once adjustments
+// are applied: an earlier record is added to, not replaced.
+export function mergeApplied(previous, edits) {
+  const merged = { g: round((previous?.g || 0) + (edits.g || 0)), l: { ...(previous?.l || {}) } };
+  for (const [index, edit] of Object.entries(edits.l || {})) merged.l[index] = { d: round((merged.l[index]?.d || 0) + (edit.d || 0)), t: edit.t };
+  return merged;
+}
