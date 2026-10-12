@@ -49,7 +49,7 @@ class Pipeline:
         torch.set_num_threads(4)
         self.tokenizer=Tokenizer();self.kks=pykakasi.kakasi();self.roman=uroman.Uroman()
         self.s2t=OpenCC('s2t');self.t2jp=OpenCC('t2jp')
-        self.separator=CachedSeparator(device='cuda',shifts=0,progress=False)
+        self.separator=None  # HTDemucs, loaded only when BS-RoFormer cannot run (see process)
         self.japanese=align_yohane.Wav2Vec2ForcedAligner(snapshot_download('NextFire/mms-300m-ForcedAligner-karaoke-ja-Latn',local_files_only=True))
         self.multilingual=torchaudio.pipelines.MMS_FA.get_model().to('cuda').eval()
         self.dictionary=torchaudio.pipelines.MMS_FA.get_dict()
@@ -162,9 +162,24 @@ class Pipeline:
         if cache.exists():emission=torch.load(cache,weights_only=True,map_location='cpu')
         else:
             print(f"SEPARATE {source['name']}",flush=True)
-            _,stems=self.separator.separate_audio_file(Path(source['audio']))
-            vocals=torchaudio.functional.resample(stems['vocals'].mean(0),self.separator.samplerate,16000)
-            del stems;gc.collect()
+            # One separation serves everything. The BS-RoFormer vocals give the emission here and,
+            # kept next to it, what the second model hears in them: onepass.py then reads that
+            # instead of separating the song again. (Two separations, HTDemucs for the emission
+            # and BS-RoFormer for the readings, were no more accurate on the lines placed by hand
+            # and took twice as long.) HTDemucs is the fallback when BS-RoFormer cannot run.
+            import onepass
+            onepass._first=(self.japanese.processor,self.japanese.model);onepass._multi=self.multilingual
+            try:wave=onepass.separated(source)
+            except Exception as error:
+                print(f"BS-RoFormer 不可用（{error}），改用 HTDemucs",flush=True);wave=np.zeros(0,dtype=np.float32)
+            if len(wave):
+                vocals=torch.from_numpy(wave)
+                write_json(folder/'vocals-readings.json',{'second':onepass.second_sounds(wave) or []} if source['language']=='ja' else {})
+            else:
+                if self.separator is None:self.separator=CachedSeparator(device='cuda',shifts=0,progress=False)
+                _,stems=self.separator.separate_audio_file(Path(source['audio']))
+                vocals=torchaudio.functional.resample(stems['vocals'].mean(0),self.separator.samplerate,16000)
+                del stems;gc.collect()
             print(f"ALIGN {source['name']}",flush=True)
             emission=self.emissions(vocals,source['language']);del vocals
             torch.save(emission,cache)

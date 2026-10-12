@@ -480,31 +480,50 @@ def second_reading(folder, source, tok):
     return as_letters(sounds, tok)
 
 
+_separator = None
+
+
+def separated(source):
+    """The song's vocals as BS-RoFormer separates them, mono at 16 kHz (empty when that fails).
+    The model stays loaded for the next song. Half precision on the GPU: about half the time;
+    the models then hear the same but for one sound in some hundreds, and no final time changed
+    on the songs it was tried on."""
+    global _separator
+    import atexit
+    import subprocess
+    import tempfile
+    from pathlib import Path
+    if _separator is None:
+        from audio_separator.separator import Separator
+        work = Path(tempfile.mkdtemp(prefix='sep-'))
+        atexit.register(shutil.rmtree, work, ignore_errors=True)
+        separator = Separator(output_dir=str(work), model_file_dir=str(MODELS / 'sep-models'), output_single_stem='Vocals', use_autocast=True)
+        separator.load_model('model_bs_roformer_ep_317_sdr_12.9755.ckpt')
+        _separator = (separator, work)
+    separator, work = _separator
+    files = separator.separate(source['audio'])
+    path = work / Path(files[0]).name
+    run = subprocess.run(['ffmpeg', '-v', 'error', '-i', str(path), '-ac', '1', '-ar', '16000', '-f', 'f32le', '-'], capture_output=True)
+    path.unlink(missing_ok=True)
+    return np.frombuffer(run.stdout, dtype=np.float32).copy()
+
+
 def vocals_readings(folder, source, tok, separate, japanese=True):
     """What both models hear in the vocals separated by BS-RoFormer (the second model hears most
     in this version of a song): [karaoke reading, second reading], each as in mix_reading. Kept
-    next to the draft as vocals-readings.json. Separating takes about a minute a song, so it is
-    only done when `separate` is set; otherwise [] unless the file is there."""
+    next to the draft as vocals-readings.json. Separating is most of a song's time, so it is
+    only done when `separate` is set; otherwise [] unless the file is there. For a song whose
+    emission was itself made from these vocals (batch_align.py does that for new songs) the
+    file holds the second model's reading only: the first model's would be the emission again."""
     cache = folder / 'vocals-readings.json'
     kept = read(cache)
     if kept is None:
         if not separate:
             return []
-        import subprocess
-        import tempfile
-        from pathlib import Path
-        from audio_separator.separator import Separator
-        work = Path(tempfile.mkdtemp(prefix='sep-'))
-        # (half precision on the GPU: about half the time; the models then hear the same but for
-        # one sound in some hundreds, and no final time changed on the songs it was tried on)
-        separator = Separator(output_dir=str(work), model_file_dir=str(MODELS / 'sep-models'), output_single_stem='Vocals', use_autocast=True)
-        separator.load_model('model_bs_roformer_ep_317_sdr_12.9755.ckpt')
-        files = separator.separate(source['audio'])
-        run = subprocess.run(['ffmpeg', '-v', 'error', '-i', str(work / Path(files[0]).name), '-ac', '1', '-ar', '16000', '-f', 'f32le', '-'], capture_output=True)
-        wave = np.frombuffer(run.stdout, dtype=np.float32).copy()
-        del separator
-        torch.cuda.empty_cache()
-        shutil.rmtree(work, ignore_errors=True)
+        try:
+            wave = separated(source)
+        except Exception:  # (the separation model is not installed, or the GPU is out of memory)
+            return []
         if not len(wave):
             return []
         kept = {'karaoke': karaoke_sounds(wave, tok) or [], 'second': second_sounds(wave) or []} if japanese else {'multi': multi_sounds(wave) or []}
