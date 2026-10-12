@@ -495,7 +495,9 @@ def vocals_readings(folder, source, tok, separate, japanese=True):
         from pathlib import Path
         from audio_separator.separator import Separator
         work = Path(tempfile.mkdtemp(prefix='sep-'))
-        separator = Separator(output_dir=str(work), model_file_dir=str(MODELS / 'sep-models'), output_single_stem='Vocals')
+        # (half precision on the GPU: about half the time; the models then hear the same but for
+        # one sound in some hundreds, and no final time changed on the songs it was tried on)
+        separator = Separator(output_dir=str(work), model_file_dir=str(MODELS / 'sep-models'), output_single_stem='Vocals', use_autocast=True)
         separator.load_model('model_bs_roformer_ep_317_sdr_12.9755.ckpt')
         files = separator.separate(source['audio'])
         run = subprocess.run(['ffmpeg', '-v', 'error', '-i', str(work / Path(files[0]).name), '-ac', '1', '-ar', '16000', '-f', 'f32le', '-'], capture_output=True)
