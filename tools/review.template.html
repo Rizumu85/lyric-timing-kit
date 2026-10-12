@@ -134,6 +134,15 @@
   #fill { position: absolute; left: 0; top: 11px; height: 4px; border-radius: 2px; background: var(--accent); width: 0; }
   #knob { position: absolute; top: 6px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--accent); left: 0; }
   .spot { position: absolute; top: 9px; height: 8px; border-radius: 4px; background: var(--mark); opacity: .55; min-width: 4px; pointer-events: none; }
+  #strip { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+  #strip .go { border-color: transparent; background: var(--mark-soft); color: var(--mark); font-weight: 600; max-width: 46vw; overflow: hidden; text-overflow: ellipsis; }
+  #strip .go .num { margin-left: 6px; font-weight: 400; opacity: .8; }
+  #strip button:disabled { opacity: .4; cursor: default; }
+  #strip .tune { visibility: visible; margin: 0 0 0 6px; color: var(--muted); font-size: 13px; }
+  #strip .old { margin-top: 0; }
+  #strip .heard-btn { margin-left: auto; }
+  .strip-none { color: var(--faint); font-size: 13px; }
+  .row.target { box-shadow: inset 0 0 0 2px var(--mark); }
   .tools { display: flex; gap: 8px; align-items: center; }
   .chip { padding: 6px 11px; border: 1px solid var(--line); border-radius: 999px; background: var(--raised); color: var(--muted); font-size: 13px; white-space: nowrap; }
   .chip[aria-pressed="true"] { border-color: transparent; background: var(--accent-soft); color: var(--accent); }
@@ -173,6 +182,7 @@
 <main id="main"><div class="inner" id="view"></div></main>
 
 <footer>
+  <div id="strip" hidden></div>
   <button class="play" id="play" aria-label="播放或暂停"><svg viewBox="0 0 24 24" id="play-icon"><path d="M7 4v16l13-8z"/></svg></button>
   <div class="clock num"><b id="now">00:00.00</b> / <span id="total">00:00</span></div>
   <div id="bar" role="slider" aria-label="播放进度" tabindex="0"><div id="fill"></div><div id="spots"></div><div id="knob"></div></div>
@@ -209,6 +219,9 @@ const SPEEDS = [1, 0.75, 0.5];
 const heard = new Set(location.protocol.startsWith('http') && DATA.heard ? DATA.heard : store.get('heard', []));
 const picked = new Map();
 let song = null, rows = [], active = -1, stopAt = null, frame = 0;
+// The places to hear in this song, the one being heard, and the line it is about ("aim"):
+// the strip above the player walks through them and carries that line's controls.
+let stops = [], at = -1, aim = -1;
 
 // Manual timing adjustments. They are saved beside the draft and only work when the page
 // comes from the local server (listen.cmd), which is also what writes them to disk.
@@ -224,6 +237,7 @@ function refreshRow(index) {
   row.classList.toggle('edited', !!delta);
   const chip = row.querySelector('.delta');
   if (chip) chip.textContent = delta ? signed(delta) + ' ×' : '';
+  if (index === aim) renderStrip();
 }
 function refreshWhole() {
   const node = $('#whole-value');
@@ -292,6 +306,11 @@ function renderSong() {
   if (!song) { $('#view').innerHTML = '<div class="empty">从左边选一首歌</div>'; return; }
   const ruby = song.lines.reduce((count, line) => count + line.w.filter(word => word[3]).length, 0);
   const meta = [KIND[song.kind], `${song.lines.length} 行`, ruby ? `${ruby} 处注音` : '', song.score != null ? `声学分数 ${song.score}` : '', song.written ? '已写入 MP3' : '未写入 MP3'].filter(Boolean);
+  stops = song.focus.map(spot => ({ label: spot.label, s: spot.s, e: spot.e, line: lineOfSpot(spot) }));
+  if (song.shift != null) song.lines.forEach((line, index) => {
+    if (line.dev != null) stops.push({ label: `第 ${index + 1} 行（${line.dev > 0 ? '晚' : '早'} ${Math.abs(line.dev).toFixed(2)} 秒）`, s: Math.max(0, Math.min(line.s, line.exp) - 2), e: null, line: index });
+  });
+  at = aim = -1;
   $('#view').innerHTML = `
     <button class="chip menu" id="menu">歌曲列表</button>
     <div class="head">
@@ -300,13 +319,13 @@ function renderSong() {
     </div>
     <div class="meta">${meta.map(text => `<span class="tag">${esc(text)}</span>`).join('')}${song.tags.map(tag => `<span class="tag warn">${tag}</span>`).join('')}</div>
     ${song.note ? `<div class="note"><b>这首要听什么</b>${esc(song.note)}${song.focus.length ? `<div class="focus">${song.focus.map((spot, index) => `<button data-spot="${index}">▶ ${esc(spot.label)} <span class="num">${clock(spot.s, false)}–${clock(spot.e, false)}</span></button>`).join('')}</div>` : ''}</div>` : ''}
-    ${song.shift != null ? `<div class="note pattern"><b>和旧轴的关系</b>${Math.abs(song.shift) < .15 ? '整首和旧轴基本一致' : `整首比旧轴统一${song.shift < 0 ? '早' : '晚'} ${Math.abs(song.shift).toFixed(2)} 秒`}。${song.lines.some(line => line.dev != null) ? `听一行确认这个规律，再看下面 ${song.lines.filter(line => line.dev != null).length} 行不符合规律的：<div class="focus">${song.lines.map((line, index) => line.dev == null ? '' : `<button data-seek="${Math.max(0, Math.min(line.s, line.exp) - 2)}">▶ 第 ${index + 1} 行 <span class="num">${line.dev > 0 ? '晚' : '早'} ${Math.abs(line.dev).toFixed(2)} 秒</span></button>`).join('')}</div>` : '没有不符合规律的行，听一行确认即可。'}</div>` : ''}
+    ${song.shift != null ? `<div class="note pattern"><b>和旧轴的关系</b>${Math.abs(song.shift) < .15 ? '整首和旧轴基本一致' : `整首比旧轴统一${song.shift < 0 ? '早' : '晚'} ${Math.abs(song.shift).toFixed(2)} 秒`}。${song.lines.some(line => line.dev != null) ? `听一行确认这个规律，再看下面 ${song.lines.filter(line => line.dev != null).length} 行不符合规律的：<div class="focus">${stops.slice(song.focus.length).map((stop, k) => `<button data-spot="${song.focus.length + k}">▶ ${esc(stop.label)}</button>`).join('')}</div>` : '没有不符合规律的行，听一行确认即可。'}</div>` : ''}
     ${song.issues.length ? `<details class="checks"><summary>自动检查的提示（${song.issues.length}）</summary><ul>${song.issues.map(text => `<li>${esc(text)}</li>`).join('')}</ul></details>` : ''}
     ${SERVED ? `<div class="whole num">整首一起移动
         <button data-whole="${-STEP}" title="整首提前 0.05 秒">−</button><button data-whole="${STEP}" title="整首推后 0.05 秒">＋</button>
         <b id="whole-value"></b><button data-whole="0" title="撤销整首的移动">还原</button>
         ${song.lines.some(line => line.old != null) ? '<button id="all-old" title="每一行的开头都改回旧歌词里的时间（逐字高亮跟着整行移动）">整首用旧轴</button><button id="all-new" title="撤销所有行的微调，回到自动打轴的时间">整首用新轴</button>' : ''}
-        <span>· 当前行 <kbd>[</kbd> <kbd>]</kbd> 微调 · <kbd>Enter</kbd> 把下一行定在此刻</span></div>`
+        <span>· 当前行 <kbd>[</kbd> <kbd>]</kbd> 微调 · <kbd>Enter</kbd> 把下一行定在此刻 · <kbd>N</kbd> <kbd>P</kbd> 下一处、上一处 · <kbd>R</kbd> 重听这一处</span></div>`
       : '<div class="whole">想手动微调时间，请双击项目文件夹里的 listen.cmd 打开这个页面。</div>'}
     <div id="help" hidden>浏览器读不到这首歌的音频文件。<br><label>选择 Music 文件夹<input id="folder" type="file" webkitdirectory multiple></label></div>
     <ol class="lines">${song.lines.map((line, index) => `
@@ -341,6 +360,72 @@ function renderSong() {
   refreshWhole();
   $('#spots').innerHTML = song.focus.map(spot => `<div class="spot" style="left:${spot.s / song.duration * 100}%;width:${(spot.e - spot.s) / song.duration * 100}%"></div>`).join('');
   $('#main').scrollTop = 0;
+  renderStrip();
+}
+
+function lineOfSpot(spot) {
+  const named = /第\s*(\d+)/.exec(spot.label || '');
+  if (named && song.lines[named[1] - 1]) return named[1] - 1;
+  return song.lines.findIndex(line => line.s >= spot.s);
+}
+function clearAim() {
+  if (aim < 0) return;
+  rows[aim]?.classList.remove('target');
+  aim = -1; renderStrip();
+}
+// Hear one of the places: play it, bring its line into view, and put that line's controls in the strip.
+function go(index) {
+  const stop = stops[index];
+  if (!stop) return;
+  rows[aim]?.classList.remove('target');
+  at = index; aim = stop.line;
+  const row = rows[aim];
+  if (row) {
+    row.classList.add('target');
+    const box = $('#main');
+    box.scrollTo({ top: row.offsetTop - box.clientHeight * 0.3, behavior: 'smooth' });
+  }
+  stopAt = stop.e ?? null;
+  seek(stop.s);
+  renderStrip();
+}
+function renderStrip() {
+  const node = $('#strip');
+  if (!song) { node.hidden = true; return; }
+  node.hidden = false;
+  const stop = stops[at], line = aim >= 0 ? song.lines[aim] : null;
+  const ref = !line ? null : song.shift != null ? (line.dev != null ? ['按规律', line.exp] : null)
+    : line.old != null && Math.abs(line.old - line.s) >= .15 ? ['旧轴', line.old] : line.vid != null ? ['视频', line.vid] : null;
+  const delta = aim >= 0 ? song.edits.l[aim]?.d || 0 : 0;
+  node.innerHTML = (stops.length
+    ? `<button class="chip" id="stop-prev" title="上一处（快捷键 P）"${at <= 0 ? ' disabled' : ''}>‹ 上一处</button>
+       <button class="chip go" id="stop-play" title="${stop ? '再听一遍这一处（快捷键 R）' : '从第一处开始听（快捷键 N）'}">▶ ${stop ? esc(stop.label) : '开始听要听的地方'} <span class="num">${stop ? at + 1 : 0} / ${stops.length}</span></button>
+       <button class="chip" id="stop-next" title="下一处（快捷键 N）"${at >= stops.length - 1 ? ' disabled' : ''}>下一处 ›</button>`
+    : '<span class="strip-none">这首没有指定要听的地方</span>')
+    + (SERVED && line ? `<span class="tune num">第 ${aim + 1} 行
+       <button data-nudge="${-STEP}" data-i="${aim}" title="这一行提前 0.05 秒（按住 Shift 是 0.5 秒，快捷键 [）">−</button>
+       <button data-nudge="${STEP}" data-i="${aim}" title="这一行推后 0.05 秒（按住 Shift 是 0.5 秒，快捷键 ]）">＋</button>
+       <button data-stamp="${aim}" title="把这一行的开头定在现在播放到的位置">定在此刻</button>
+       ${ref ? `<button class="old num" data-seek="${ref[1]}" title="从这个时间播，对比一下">${ref[0]} ${clock(ref[1])}</button><button class="old use" data-use="${ref[1]}" data-i="${aim}" title="这一行改用这个时间">用</button>` : ''}
+       <button class="delta" data-reset="${aim}" title="撤销这一行的微调">${delta ? signed(delta) + ' ×' : ''}</button></span>` : '')
+    + `<button class="heard-btn" id="pass-next" aria-pressed="${heard.has(song.key)}" title="标记通过，并打开下一首还没通过的歌">${heard.has(song.key) ? '已通过，下一首 ›' : '通过，下一首 ›'}</button>`;
+}
+function refreshHeard() {
+  for (const button of document.querySelectorAll('[data-heard]')) { button.setAttribute('aria-pressed', heard.has(song.key)); button.textContent = heard.has(song.key) ? '已通过 ✓' : button.id === 'heard' ? '通过' : '听完了，通过'; }
+}
+// Mark this song as passed and open the next one that is not, at its first place to hear.
+function passNext() {
+  if (!heard.has(song.key)) {
+    heard.add(song.key);
+    store.set('heard', [...heard]);
+    if (SERVED) fetch('/heard', { method: 'PUT', body: JSON.stringify([...heard]) }).catch(() => {});
+  }
+  const order = [...songs.filter(item => item.priority), ...songs.filter(item => !item.priority && !item.written), ...songs.filter(item => !item.priority && item.written)];
+  const here = order.indexOf(song);
+  const next = [...order.slice(here + 1), ...order.slice(0, here)].find(item => !heard.has(item.key));
+  if (!next) { audio.pause(); refreshHeard(); renderList(); renderStrip(); return toast('这一页的歌都通过了'); }
+  select(next.key);
+  if (stops.length) go(0); else audio.play().catch(() => {});
 }
 
 function select(key, autoplay = false) {
@@ -420,10 +505,14 @@ document.addEventListener('click', event => {
     // also kept on the server, so "the ones I have listened to" can be acted on from chat
     if (SERVED) fetch('/heard', { method: 'PUT', body: JSON.stringify([...heard]) }).catch(() => {});
     // the button under the title and the one after the last line show the same state
-    for (const button of document.querySelectorAll('[data-heard]')) { button.setAttribute('aria-pressed', heard.has(song.key)); button.textContent = heard.has(song.key) ? '已通过 ✓' : button.id === 'heard' ? '通过' : '听完了，通过'; }
+    refreshHeard(); renderStrip();
     return renderList();
   }
-  if (target.dataset.spot) { const spot = song.focus[target.dataset.spot]; stopAt = spot.e; return seek(spot.s); }
+  if (target.dataset.spot) return go(Number(target.dataset.spot));
+  if (target.id === 'stop-prev') return go(at - 1);
+  if (target.id === 'stop-next') return go(at + 1);
+  if (target.id === 'stop-play') return go(Math.max(0, at));
+  if (target.id === 'pass-next') return passNext();
   if (target.dataset.memoEdit) {
     const index = Number(target.dataset.memoEdit), box = document.querySelector(`[data-memo="${index}"]`);
     box.innerHTML = `<input class="memo-input" data-memo-input="${index}" value="${esc(song.notes[index]?.n || '')}" placeholder="写给 Claude 的备注，回车保存，清空即删除">`;
@@ -442,7 +531,7 @@ document.addEventListener('click', event => {
   }
   if (target.dataset.reset) return setDelta(Number(target.dataset.reset), 0);
   if (target.dataset.whole) return nudgeWhole(Number(target.dataset.whole));
-  if (target.dataset.line) { stopAt = null; return seek(lineStart(Number(target.dataset.line)), true); }
+  if (target.dataset.line) { stopAt = null; clearAim(); return seek(lineStart(Number(target.dataset.line)), true); }
   if (target.dataset.seek) { stopAt = null; return seek(Number(target.dataset.seek), true); }
 });
 document.addEventListener('change', event => {
@@ -465,7 +554,7 @@ const scrub = event => {
   audio.currentTime = Math.min(1, Math.max(0, (event.clientX - box.left) / box.width)) * total;
   paint();
 };
-bar.addEventListener('pointerdown', event => { stopAt = null; bar.setPointerCapture(event.pointerId); scrub(event); });
+bar.addEventListener('pointerdown', event => { stopAt = null; clearAim(); bar.setPointerCapture(event.pointerId); scrub(event); });
 bar.addEventListener('pointermove', event => { if (bar.hasPointerCapture(event.pointerId)) scrub(event); });
 
 document.addEventListener('keydown', event => {
@@ -485,8 +574,10 @@ document.addEventListener('keydown', event => {
   const step = { ArrowLeft: -3, ArrowRight: 3 }[event.key], move = { ArrowUp: -1, ArrowDown: 1 }[event.key];
   if (event.key === ' ') { stopAt = null; audio.paused ? audio.play().catch(() => {}) : audio.pause(); }
   else if (step) audio.currentTime = Math.max(0, audio.currentTime + step);
-  else if (move) { stopAt = null; seek(lineStart(Math.min(song.lines.length - 1, Math.max(0, active + move))), true); }
-  else if (SERVED && (event.key === '[' || event.key === ']') && active >= 0) nudge(active, event.key === '[' ? -STEP : STEP);
+  else if (move) { stopAt = null; clearAim(); seek(lineStart(Math.min(song.lines.length - 1, Math.max(0, active + move))), true); }
+  // while one of the places to hear is up, [ and ] move its line; otherwise the line being sung
+  else if (SERVED && (event.key === '[' || event.key === ']') && (aim >= 0 || active >= 0)) nudge(aim >= 0 ? aim : active, event.key === '[' ? -STEP : STEP);
+  else if (stops.length && /^[npr]$/i.test(event.key)) go({ n: at + 1, p: at - 1, r: Math.max(0, at) }[event.key.toLowerCase()]);
   else if (SERVED && event.key === 'Enter' && active + 1 < song.lines.length) stamp(active + 1);
   else return;
   event.preventDefault();
