@@ -102,7 +102,7 @@ function applyNotes(song, notes) {
   });
   for (const flag of notes.flags || []) {
     const targets = flag.line ? [song.lines[flag.line - 1]] : song.lines.filter(line => line.t.includes(flag.match));
-    for (const line of targets) if (line) line.flag = line.noteFlag = flag.text;
+    for (const line of targets) if (line) { line.flag = line.noteFlag = flag.text; if (typeof flag.was === 'number') line.was = round(flag.was); }
   }
 }
 

@@ -350,6 +350,7 @@ function renderSong() {
           ${song.shift != null
             ? (line.dev != null ? `<span class="flag">不符合规律：比其他行${line.dev > 0 ? '晚' : '早'} ${Math.abs(line.dev).toFixed(2)} 秒</span><span class="pair"><button class="old num" data-seek="${line.exp}" title="按其他行的规律，这一句应该在这里开始，点一下对比">按规律 ${clock(line.exp)}</button>${SERVED ? `<button class="old use" data-use="${line.exp}" data-i="${index}" title="这一行改到按规律推出的时间">用</button>` : ''}</span>` : '')
             : line.old != null && Math.abs(line.old - line.s) >= 1 ? `<span class="pair"><button class="old num" data-seek="${line.old}" title="这一句在旧歌词里的时间，点一下对比">旧轴 ${clock(line.old)}</button>${SERVED ? `<button class="old use" data-use="${line.old}" data-i="${index}" title="这一行改用旧轴的时间">用</button>` : ''}</span>` : ''}
+          ${line.was != null ? `<span class="pair"><button class="old num" data-seek="${line.was}" title="这一句改动之前的位置，点一下对比">原位置 ${clock(line.was)}</button>${SERVED ? `<button class="old use" data-use="${line.was}" data-i="${index}" title="这一行改回原位置">用</button>` : ''}</span>` : ''}
           ${line.vid != null ? `<span class="pair"><button class="old vid num" data-seek="${line.vid}" title="卡拉 OK 视频里这一句开始变色的时间，点一下对比">视频 ${clock(line.vid)}</button>${SERVED ? `<button class="old vid use" data-use="${line.vid}" data-i="${index}" title="这一行改用视频的时间">用</button>` : ''}</span>` : ''}
         </div>
       </li>`).join('')}</ol>
@@ -394,7 +395,7 @@ function renderStrip() {
   if (!song) { node.hidden = true; return; }
   node.hidden = false;
   const stop = stops[at], line = aim >= 0 ? song.lines[aim] : null;
-  const ref = !line ? null : song.shift != null ? (line.dev != null ? ['按规律', line.exp] : null)
+  const ref = !line ? null : line.was != null ? ['原位置', line.was] : song.shift != null ? (line.dev != null ? ['按规律', line.exp] : null)
     : line.old != null && Math.abs(line.old - line.s) >= .15 ? ['旧轴', line.old] : line.vid != null ? ['视频', line.vid] : null;
   const delta = aim >= 0 ? song.edits.l[aim]?.d || 0 : 0;
   node.innerHTML = (stops.length
