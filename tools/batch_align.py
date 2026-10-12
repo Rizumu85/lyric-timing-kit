@@ -154,7 +154,7 @@ class Pipeline:
         if len(emission)!=total:raise ValueError('Acoustic frame mismatch')
         return emission
 
-    def process(self,source,embed=True,constrained_lines=False):
+    def process(self,source,embed=True,constrained_lines=False,refine=False):
         folder=OUT/source['key'];start=time.monotonic()
         items,rows=self.prepare(source)
         write_json(folder/'prepared.json',{'rows':rows,'items':items})
@@ -335,8 +335,33 @@ class Pipeline:
         write_json(folder/'aligned.json',items)
         doc={'format':'folia-lyricdata','version':1,'exportedAt':datetime.now(timezone.utc).isoformat(),'song':{'title':source['title'] or Path(source['audio']).stem,'artist':source['artist'],'durationMs':round(source['duration']*1000)},'source':'local','lyrics':{'lines':lines,'isWordByWord':True}}
         write_json(folder/'aligned.fia',doc)
+        # The draft above only gives the song its shape. For Japanese songs the times are then
+        # set by onepass.py: what the models hear without the lyrics is pinned where it was heard
+        # (several readings of the recording, voted on), the platform times say which stretch a
+        # line belongs to, and one alignment pass fills in the rest.
+        unsure=[]
+        if refine and source['language']=='ja' and (folder/'source.json').exists():
+            try:
+                import onepass
+                onepass._first=(self.japanese.processor,self.japanese.model)  # the model is already loaded
+                refined,report=onepass.plan(source['key'],separate=True)
+                lines=refined['lyrics']['lines'];doc['lyrics']['lines']=lines
+                write_json(folder/'aligned.fia',doc)
+                unsure=[r for r in report['lines'] if r['flags']]
+                source['issues']=list(dict.fromkeys(source['issues']+[f"整首一次对齐（{report['readings']} 路读法，听出 {report['heard']:.0%} 的音）"]))
+                # the lines the tool is not sure of are pointed out on the listening page
+                notes_file=OUT/'review-notes.json'
+                notes=json.loads(notes_file.read_text(encoding='utf-8')) if notes_file.exists() else {}
+                entry=notes.get(source['key'],{})
+                kept=[f for f in entry.get('flags',[]) if not f.get('auto')]
+                entry['flags']=kept+[{'line':r['line'],'text':text,'auto':True} for r in unsure for text in r['flags']]
+                if entry['flags'] or source['key'] in notes:
+                    notes[source['key']]=entry;write_json(notes_file,notes)
+            except Exception as e:
+                source['issues']=list(dict.fromkeys(source['issues']+[f'新的打轴办法没有成功（{e}），保留了旧办法的结果']))
         shifts=[abs(l['startTime']-r['sourceStart']) for l,r in zip(lines,rows) if r['sourceStart'] is not None]
         problems=[]
+        if unsure:problems.append(f'{len(unsure)} 行模型没把握（没听出来、搬过位置或和平台时间差得多），需试听确认')
         weak=sum(s<.1 for s in scores)/len(scores)
         p75=float(np.percentile(shifts,75)) if shifts else None
         if any(not 0<=l['startTime']<=l['endTime']<=source['duration']+.05 for l in lines):problems.append('输出时间越界')
@@ -368,7 +393,7 @@ class Pipeline:
         return result
 
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('--limit',type=int);parser.add_argument('--key');parser.add_argument('--keys',help='Comma-separated keys to process in one model session');parser.add_argument('--draft-only',action='store_true');parser.add_argument('--retry',action='store_true');parser.add_argument('--retry-errors',action='store_true');parser.add_argument('--constrained-lines',action='store_true',help='Use each existing sentence timestamp as a local alignment window')
+    parser=argparse.ArgumentParser();parser.add_argument('--limit',type=int);parser.add_argument('--key');parser.add_argument('--keys',help='Comma-separated keys to process in one model session');parser.add_argument('--draft-only',action='store_true');parser.add_argument('--retry',action='store_true');parser.add_argument('--retry-errors',action='store_true');parser.add_argument('--constrained-lines',action='store_true',help='Use each existing sentence timestamp as a local alignment window');parser.add_argument('--no-refine',action='store_true',help='Keep the times of the first alignment (do not run onepass.py)')
     args=parser.parse_args()
     sources=json.loads((OUT/'inventory.json').read_text(encoding='utf-8'))
     candidates=[]
@@ -384,7 +409,7 @@ def main():
     if args.limit:candidates=candidates[:args.limit]
     pipeline=Pipeline()
     for n,source in enumerate(candidates,1):
-        try:result=pipeline.process(source,not args.draft_only,constrained_lines=args.constrained_lines)
+        try:result=pipeline.process(source,not args.draft_only,constrained_lines=args.constrained_lines,refine=not args.no_refine)
         except Exception as e:
             result={'key':source['key'],'name':source['name'],'status':'alignment_error','issues':source['issues']+[str(e)],'traceback':traceback.format_exc()}
             write_json(OUT/source['key']/'result.json',result)

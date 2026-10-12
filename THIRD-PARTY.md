@@ -7,9 +7,10 @@
 | 用途 | 模型 | 许可证 |
 | --- | --- | --- |
 | 人声分离 | Demucs htdemucs（`adefossez/HTDemucs`） | 代码 MIT |
-| 人声分离（可选） | BS-RoFormer（经 audio-separator 下载） | 权重许可证未明确说明，自行判断 |
+| 人声分离（第二路） | BS-RoFormer（经 audio-separator 下载） | 权重许可证未明确说明，自行判断 |
 | 日语强制对齐 | `NextFire/mms-300m-ForcedAligner-karaoke-ja-Latn` | CC BY-NC-SA 4.0 |
 | 其他语言强制对齐 | torchaudio `MMS_FA`（基于 `facebook/mms-300m`） | CC BY-NC 4.0 |
+| 第二个读音模型（日语歌声的音素识别） | [RomajiASR](https://github.com/Xiantaidu/RomajiASR) v1.0.0，基于 `prj-beatrice/japanese-hubert-base-phoneme-ctc` | 代码 Apache-2.0；权重的许可证以其发布页为准 |
 | 日语、英语听写 | `Qwen/Qwen3-ASR-1.7B` | Apache-2.0 |
 | 中文听写 | `FireRedTeam/FireRedASR2-AED` | Apache-2.0 |
 
@@ -26,6 +27,7 @@
 | uroman | 韩语等文字的罗马化（对齐用） | Apache-2.0 |
 | romkan、opencc、pypinyin、jaconv | 文字转换 | BSD / Apache-2.0 / MIT |
 | torch、torchaudio、transformers、librosa | 推理与音频 | BSD / Apache-2.0 / ISC |
+| numba | 逐帧比对与对齐的加速 | BSD-2-Clause |
 | yt-dlp、yutto（可选） | 下载卡拉 OK 视频用于核对读音 | Unlicense / GPL-3.0 |
 
 `tools/format/` 与配套的 Folia 歌词模组中的同名文件同源，由同一作者编写。

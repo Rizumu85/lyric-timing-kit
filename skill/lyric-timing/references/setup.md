@@ -29,15 +29,18 @@
 | 用途 | 模型 | 许可证 | 备注 |
 | --- | --- | --- | --- |
 | 人声分离 | Demucs htdemucs | MIT（代码） | 默认 |
-| 人声分离（可选） | BS-RoFormer | 权重许可证不明确 | 人声更干净，只在默认效果差时使用 |
+| 人声分离（第二路） | BS-RoFormer（`model_bs_roformer_ep_317_sdr_12.9755.ckpt`） | 权重许可证不明确 | `onepass.py --separate` 用它再分离一次，给两个模型多一个版本听；经 audio-separator 首次使用时下载到 `<modelDir>/sep-models`，约 640 MB |
 | 日语强制对齐 | NextFire/mms-300m-ForcedAligner-karaoke-ja-Latn | CC BY-NC-SA 4.0 | **禁止商用** |
-| 其他语言强制对齐 | torchaudio MMS_FA | CC BY-NC 4.0 | **禁止商用** |
+| 其他语言强制对齐 | torchaudio MMS_FA | CC BY-NC 4.0 | **禁止商用**；日语歌里的英语句也用它 |
+| 第二个读音模型 | RomajiASR v1.0.0 | 代码 Apache-2.0，权重以其发布页为准 | 日语歌声的音素识别。从 https://github.com/Xiantaidu/RomajiASR 的发布页下载 `model_safetensors.zip`（约 350 MB），解压到 `<modelDir>/asr-models/RomajiASR-v1.0.0/`（里面是 `config.json`、`model.safetensors`、`phoneme_vocab.json`）。用 transformers 直接加载，不需要它的代码。没装时 `onepass.py` 只用对齐模型自己的读法，读音检查也退回单模型 |
 | 日语、英语听写 | Qwen/Qwen3-ASR-1.7B | Apache-2.0 | |
 | 中文听写 | FireRedASR2-AED | Apache-2.0 | |
 
 模型由使用者自己下载，本仓库不分发权重。因为两个对齐模型禁止商用，这套流程只能用于个人或非商业用途，向用户说明这一点。
 
-显存：对齐 8 GB 足够；听写模型约需 8–10 GB。两者不要同时跑。
+显存：对齐 8 GB 足够；听写模型约需 8–10 GB。两者不要同时跑。`onepass.py` 每首歌多花一分半钟左右，主要是多做的那次人声分离。
+
+选这两个模型的依据（都在同一批歌上，用人手动放过的句首当标准量过）：通用的听写模型（带时间戳的 Whisper、Qwen3-ASR 加对齐器、MOSS-Music、CrisperWhisper）定句首的误差在 0.3–0.9 秒，不如歌词表自带的时间（约 0.1 秒）；逐帧输出的模型才够准。RomajiASR 和对齐模型在两者都听到的音上只差约 0.02 秒，各自能钉住七成左右的音，合起来八成多。把主唱和和声分开的分离模型试过，没有帮助。换模型前先用 `onepass.py --eval-hand` 这样的办法量，不要凭印象。
 
 ## 音频格式
 

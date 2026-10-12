@@ -15,5 +15,7 @@ pypinyin
 opencc
 mutagen
 numpy<2
-# optional: BS-RoFormer vocal separation (prepare_emission.py)
-# audio-separator
+numba
+# BS-RoFormer vocal separation: the second version of the vocals onepass.py lets the models hear
+# (--separate, on by default in batch_align.py), and prepare_emission.py
+audio-separator

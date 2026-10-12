@@ -9,8 +9,12 @@
 | `source.json` | 歌词表：每行原文、译文、原始时间。读音写在汉字后面的括号里 | 导入；之后只由人或 Agent 明确修改 |
 | `prepared.json` | 上一次打轴时每行实际使用的读音 | 打轴 |
 | `aligned.fia` | 草稿：逐字时间和注音 | 打轴、单行修改 |
+| `aligned.in-file.fia` | 已写入的歌被重新打轴时，音乐文件里那一版的副本 | `onepass.py` |
+| `ja-emission.pt` | 对齐模型对分离人声的逐帧输出（20 毫秒一帧），重排时直接复用 | 打轴 |
+| `mix-reading.json`、`second-reading.json`、`vocals-readings.json` | 不看歌词的几路读法：对齐模型听原曲、第二个模型听原曲、两个模型听 BS-RoFormer 人声 | `onepass.py` |
 | `result.json` | 状态。`complete` 表示已写入，`confirmed` 表示人确认过 | 各阶段 |
 | `timing-edits.json` | 用户在试听页上的手动调整，写入时合并进草稿 | 试听页 |
+| `timing-edits.applied.json` | 已经并进草稿的手动调整的累计记录；记录里的行就是“人放过的行”，重排时原样保留 | 写入、`onepass.py` |
 | `line-notes.json` | 用户写给 Agent 的逐行备注 | 试听页 |
 | `heard.json`、`lyric-check.json` | 听写结果，以及它和歌词的差异 | 版本核对 |
 | `reading-check.json`、`reading-outliers.json` | 两种声学读音检查的结果 | 读音核对 |
@@ -50,12 +54,35 @@ node find_translation.mjs <key> && node apply_translation.mjs <key>   # 缺译�
 ### 2. 打轴
 
 ```text
-python batch_align.py                    # 全部未打轴的歌
+python batch_align.py                    # 全部未打轴的歌；日语歌打完自动接着跑 onepass（--no-refine 关掉）
+python onepass.py <key> ...              # 预览：给以前打过轴的歌按新办法重定时间
+python onepass.py <key> ... --separate --write   # 写草稿并送上试听页；--separate 多做一次 BS-RoFormer 人声分离
+python onepass.py --eval-hand [<key> ...]        # 只读：人手动放过的行，工具现在自己会放在哪
 python realign_song.py <key>             # 按 source.json 重新打一首
 python realign_song.py --anchor-embedded <key>   # 文件里已有歌词时，以其中的句首时间为锚
 node realign_keys.mjs <keys file>        # 批量重排，自动为每首选择上面两种方式
 node pin_to_source.mjs <key> <行号> ...  # 对不出来的行（拖长的哼唱、打码的词）放回歌词表的时间
 ```
+
+#### onepass 做了什么
+
+第一次强制对齐只负责定结构，时间由 `onepass.py` 重定。它把三种信息各用在擅长的地方：
+
+1. **不看歌词的读法**定“每个音在哪”。对齐模型逐帧读出它听到的音，第二个模型（RomajiASR）逐个报出它听到的拍；各读原曲和分离后的人声，一首歌最多五路。歌词里连着对上三个音以上的，钉在听到的时刻。对齐模型按字母比，第二个模型按“音”比：辅音同族或元音相同就算相近（它常把 zu 听成 tsu、把英语按片假名读，但个数和节拍是对的）。
+2. **投票**。同一个模型读不同版本的录音容易一起错（重复的词都对到同一处错的地方），所以第二个模型的两路读法一致时直接采用，不被对齐模型的几路否决；只有一路有异议时，这个音谁都不信，留给第 4 步。
+3. **歌词表的时间**只划范围：每句在“自己的时间前 2 秒到下一句时间后 2 秒”里找（一句最多延到 6 秒后，逐拍比对时 12 秒），并算出整首相对歌词表的偏移。有重复时取离歌词表时间最近的那次。
+4. **按歌词整首对齐一遍**，只填没钉住的音，夹在钉住的音之间。一段声音只归一个字，所以下一句不会抢上一句的句尾。
+
+之后的收尾规则：每句最后一个字至少留 0.2 秒、不拖进后面歌词里没有的念白；人放过的行原样保留，并且就在人放的位置附近比对；整句是拉丁字母、两个模型又听出不到一半的英语句，交给多语对齐模型按英文单词重排。
+
+它会给这些行加标记，标记会出现在试听页上，也会让这首歌不能自动写入：
+
+| 标记 | 含义 |
+| --- | --- |
+| 这句的音模型大多没听出来 | 位置是按歌词表时间推的 |
+| 平台歌词时间那里没听到这句，在某处听到了 | 两路读法在同一处找到，已搬过去 |
+| 这句比平台歌词的时间早/晚若干秒 | 和整首的偏移差 1 秒以上 |
+| 英语句……用英语对齐模型排的 | 句内时间来自另一个模型 |
 
 重新对齐已经写入过的歌时用锚定方式。按歌词表原始时间开窗的方式会让整句提前约一秒，只在歌词表时间可信而整曲对齐明显失败时使用（`--windowed`）。
 
@@ -85,7 +112,7 @@ node fix_lines.mjs <edits.json>          # 单行修改：改词、改读音、�
 { "<key>": { "replace": [[行号, "原文片段", "新片段"]], "remove": [行号], "removeFrom": 行号 } }
 ```
 
-它只重新对齐被改的行，并保持该行原来的句首时间；用户的手动调整留在各自的行上。
+它只重新对齐被改的行，并保持该行原来的句首时间；用户的手动调整留在各自的行上。删行之后 `prepared.json` 不会跟着变，下次要用 `onepass.py` 重排这首歌之前，先把里面对应的行删掉或重新打轴一遍，否则会报“draft, pronunciations and lyric sheet are out of step”。
 
 ### 7. 写入
 
