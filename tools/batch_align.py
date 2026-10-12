@@ -340,12 +340,15 @@ class Pipeline:
         # (several readings of the recording, voted on), the platform times say which stretch a
         # line belongs to, and one alignment pass fills in the rest.
         unsure=[]
-        if refine and source['language']=='ja' and (folder/'source.json').exists():
+        # (songs in other languages too, when the lyric sheet has times: there the multilingual model's
+        # own emission is read without the lyrics, and compared with the lyrics by sound family)
+        if refine and (folder/'source.json').exists() and (source['language']=='ja' or all(r['sourceStart'] is not None for r in rows)):
             try:
                 import onepass
                 onepass._first=(self.japanese.processor,self.japanese.model)  # the model is already loaded
+                onepass._multi=self.multilingual
                 refined,report=onepass.plan(source['key'],separate=True)
-                if report['heard']<onepass.LEAST:raise ValueError(f"只听出 {report['heard']:.0%} 的音")
+                if report['heard']<report['least']:raise ValueError(f"只听出 {report['heard']:.0%} 的音")
                 lines=refined['lyrics']['lines'];doc['lyrics']['lines']=lines
                 write_json(folder/'aligned.fia',doc)
                 unsure=[r for r in report['lines'] if r['flags']]

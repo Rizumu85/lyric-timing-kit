@@ -26,6 +26,7 @@ were aligned before:
   --no-second  the pipeline's own reading only
 """
 import json
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -34,7 +35,7 @@ import numpy as np
 import torch
 from numba import njit
 
-from kit_config import OUT, MODELS
+from kit_config import OUT, MODELS, FA_KARA
 
 MODEL = 'NextFire/mms-300m-ForcedAligner-karaoke-ja-Latn'
 STEP = .02  # seconds a frame of the karaoke model
@@ -105,6 +106,8 @@ SHOWN = .2  # a line's last unit is given this long before the next line, when t
 DOUBT = 1.0  # a line this far from its expected start is pointed out
 FAR = 1.0  # in a confirmed song, a line this far from the platform pattern keeps its place
 LEAST = .5  # a re-timing that heard a smaller share of the song than this is not used
+LEAST_OTHER = .1  # ... for a song that is not Japanese: the multilingual model hears a third to a half of singing
+FOLLOWED = .5  # in such a song a line the model did not make out is only pointed out when it followed the song this well
 BACKUP = 'aligned.in-file.fia'  # the version in the music file, kept while a new draft waits to be heard
 SECOND = MODELS / 'asr-models' / 'RomajiASR-v1.0.0'  # the second lyric-free reader (weights from its release page; see setup.md)
 LAG = 1  # frames by which the second reader puts a sound later than the karaoke model, typically
@@ -270,6 +273,65 @@ def viterbi(emit, quiet, same, enter_low, enter_high):
     return first
 
 
+class Letters:
+    """The alphabet of the multilingual model (torchaudio's MMS_FA), with the few calls plan()
+    makes on the karaoke model's tokenizer. For the songs that are not Japanese."""
+
+    def __init__(self):
+        import torchaudio
+        self.table = {letter: index for letter, index in torchaudio.pipelines.MMS_FA.get_dict().items() if letter != '*'}
+        self.names = {index: letter for letter, index in self.table.items()}
+        self.pad_token_id, self.vocab_size = 0, len(self.table)
+
+    def encode(self, text, add_special_tokens=False):
+        return [self.table[letter] for letter in text if letter in self.table and self.table[letter]]
+
+    def convert_ids_to_tokens(self, index):
+        return self.names[index]
+
+
+def letter_sound(letter, before, pinyin):
+    """The sound family of a letter (0: not a sound of its own). The multilingual model writes
+    what it hears, not how the language spells it: credit comes out as krede, symphony as
+    simpuni, qing as jing, xiang as sang. So the lyrics are compared with its reading by family:
+    every vowel is one sound, b p f v are one, d t are one, l r are one, the hissing sounds are
+    one; y, w and the second letter of sh zh ch ng are no sounds of their own. `before` is the
+    letter just before it in the same word ('' at its start). `pinyin`: the letters spell a
+    Chinese syllable (q x c hiss); otherwise they are written as heard (the model's reading, or
+    an English word respelled by said_as)."""
+    if letter in 'aeiou':
+        return 1
+    if letter in "yw'" or (letter == 'h' and before in ('s', 'z', 'c')) or (letter == 'g' and before == 'n'):
+        return 0
+    if letter in 'qx':
+        return 7 if pinyin else 6
+    for family, members in ((2, 'bpfv'), (3, 'm'), (4, 'n'), (5, 'lr'), (6, 'gk'), (7, 'szjc'), (8, 'dt'), (9, 'h')):
+        if letter in members:
+            return family
+    return 10
+
+
+_said = {}
+
+
+def said_as(word):
+    """An English word written the way it is said (they -> zei, credit -> kredat), from the
+    pronouncing dictionary FA-Kara brings; '' when it has no entry."""
+    if word not in _said:
+        import contextlib
+        import io
+        if str(FA_KARA) not in sys.path:
+            sys.path.insert(0, str(FA_KARA))
+        import haruraw2norm
+        try:
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                parts = haruraw2norm.process_haruhi_line(word, 'jaen')
+            _said[word] = ''.join(c for part in parts for c in (part.get('pron') or '').lower() if c.isalpha())
+        except Exception:
+            _said[word] = ''
+    return _said[word]
+
+
 def reading(emission, tok):
     """What the model hears when it is not told the lyrics: (token ids, first frame of each)."""
     best = emission.argmax(1)
@@ -311,6 +373,34 @@ def karaoke_sounds(wave, tok):
         best.append(frames[first:first + min(core * rate, len(wave) - start) // hop])
     best = np.concatenate(best)
     keep = np.flatnonzero((best != tok.pad_token_id) & np.concatenate(([True], best[1:] != best[:-1])))
+    return [[int(best[f]), int(f)] for f in keep]
+
+
+_multi = None
+
+
+def multi_sounds(wave):
+    """The multilingual model's most likely letters in `wave` (mono, 16 kHz): [[letter id, frame],
+    ...]; None when it cannot be loaded. (For the songs that are not Japanese; the pipeline's own
+    reading of such a song is the emission it saved, of the separated vocals.)"""
+    global _multi
+    try:
+        if _multi is None:
+            import torchaudio
+            _multi = torchaudio.pipelines.MMS_FA.get_model(with_star=False).to('cuda').eval()
+    except Exception:
+        return None
+    rate, hop, core, edge = 16000, 320, 24, 1
+    best = []
+    for start in range(0, len(wave), core * rate):
+        left, right = max(0, start - edge * rate), min(len(wave), start + (core + edge) * rate)
+        with torch.inference_mode():
+            logits, _ = _multi(torch.from_numpy(wave[left:right])[None].to('cuda'))
+            frames = logits[0, :, :28].argmax(-1).cpu().numpy()  # (without the "any sound" column, if the model has it)
+        first = (start - left) // hop
+        best.append(frames[first:first + min(core * rate, len(wave) - start) // hop])
+    best = np.concatenate(best)
+    keep = np.flatnonzero((best != 0) & np.concatenate(([True], best[1:] != best[:-1])))
     return [[int(best[f]), int(f)] for f in keep]
 
 
@@ -360,15 +450,15 @@ def as_letters(sounds, tok):
     return np.asarray(ids, dtype=np.int64), np.asarray(at, dtype=np.int64)
 
 
-def mix_reading(folder, source, tok):
-    """What the karaoke model hears in the full mix (the pipeline's own reading is of the
-    separated vocals), as (token ids, frame of each). Kept next to the draft as
-    mix-reading.json; None when the model is not at hand."""
+def mix_reading(folder, source, tok, japanese=True):
+    """What the karaoke model (for a song that is not Japanese: the multilingual model) hears in
+    the full mix (the pipeline's own reading is of the separated vocals), as (token ids, frame of
+    each). Kept next to the draft as mix-reading.json; None when the model is not at hand."""
     cache = folder / 'mix-reading.json'
     sounds = read(cache)
     if sounds is None:
         wave = mix_of(source)
-        sounds = karaoke_sounds(wave, tok) if len(wave) else None
+        sounds = (karaoke_sounds(wave, tok) if japanese else multi_sounds(wave)) if len(wave) else None
         if sounds is None:
             return None
         cache.write_text(json.dumps(sounds), encoding='utf-8')
@@ -389,7 +479,7 @@ def second_reading(folder, source, tok):
     return as_letters(sounds, tok)
 
 
-def vocals_readings(folder, source, tok, separate):
+def vocals_readings(folder, source, tok, separate, japanese=True):
     """What both models hear in the vocals separated by BS-RoFormer (the second model hears most
     in this version of a song): [karaoke reading, second reading], each as in mix_reading. Kept
     next to the draft as vocals-readings.json. Separating takes about a minute a song, so it is
@@ -414,11 +504,11 @@ def vocals_readings(folder, source, tok, separate):
         shutil.rmtree(work, ignore_errors=True)
         if not len(wave):
             return []
-        kept = {'karaoke': karaoke_sounds(wave, tok) or [], 'second': second_sounds(wave) or []}
+        kept = {'karaoke': karaoke_sounds(wave, tok) or [], 'second': second_sounds(wave) or []} if japanese else {'multi': multi_sounds(wave) or []}
         cache.write_text(json.dumps(kept), encoding='utf-8')
     out = []
-    if kept.get('karaoke'):
-        out.append(('karaoke', as_tokens(kept['karaoke'])))
+    if kept.get('karaoke') or kept.get('multi'):  # (the same model as the first reading, on other audio)
+        out.append(('karaoke', as_tokens(kept.get('karaoke') or kept['multi'])))
     if kept.get('second'):
         out.append(('second', as_letters(kept['second'], tok)))
     return out
@@ -469,7 +559,7 @@ def clock(t):
     return f'{int(t // 60)}:{t % 60:05.2f}'
 
 
-def plan(key, pins=True, second=True, separate=False, keep=True):
+def plan(key, pins=True, second=True, separate=False, keep=True, hold=()):
     """The new times of one song. Returns (doc, report); report['lines'] has one entry per sung
     line: line number, old and new start, expected start, share of its sounds heard, flags."""
     folder = OUT / key
@@ -479,7 +569,9 @@ def plan(key, pins=True, second=True, separate=False, keep=True):
     waiting = (read(folder / 'result.json') or {}).get('status') != 'complete'
     base = (read(folder / BACKUP) if waiting else None) or current
     prepared, source = read(folder / 'prepared.json'), read(folder / 'source.json')
-    if not base or not prepared or not source or not (folder / 'ja-emission.pt').exists():
+    japanese = (source or {}).get('language') == 'ja'
+    sound = folder / ('ja-emission.pt' if japanese else 'mms-emission.pt')
+    if not base or not prepared or not source or not sound.exists():
         raise ValueError('draft, pronunciations, lyric sheet or emission missing')
     prons = sung(prepared)
     sheet = [row.get('sourceStart') for row in source['rows']]
@@ -513,9 +605,14 @@ def plan(key, pins=True, second=True, separate=False, keep=True):
                 if units[i] and (sheet[i] is None or abs(units[i][0]['startTime'] - sheet[i] - usual) > FAR):
                     sheet[i] = round(units[i][0]['startTime'] - usual, 2)
                     kept_place.add(i)
-    emission = torch.load(folder / 'ja-emission.pt', map_location='cpu', weights_only=True).float().numpy()
+    emission = torch.load(sound, map_location='cpu', weights_only=True).float().numpy()
+    if not japanese:
+        # the multilingual model's last column is its "any sound" token, which was given half of
+        # every frame when the emission was saved: it is left out and the rest made to sum to one
+        emission = emission[:, :-1]
+        emission = emission - np.log(np.exp(emission).sum(1, keepdims=True))
     total = len(emission)
-    tok = tokenizer()
+    tok = tokenizer() if japanese else Letters()
     blank = tok.pad_token_id
     order = [i for i in range(len(lines)) if units[i] and prons[i]]
     tokens, owner = [], []  # owner: (line, unit, index of the sound inside the unit)
@@ -529,6 +626,40 @@ def plan(key, pins=True, second=True, separate=False, keep=True):
     leading = np.asarray([o[2] == 0 for o in owner])  # the first sound of a unit
     unit_of = np.cumsum(leading) - 1
     heard, heard_at = reading(emission, tok)
+    # What counts as the same sound when the lyrics are compared with a reading: for the karaoke
+    # model the letter itself (it writes Japanese the way the lyrics are romanized); for the
+    # multilingual model the letter's family (see letter_sound).
+    def by_family(ids, at):
+        """A reading of the multilingual model as sound families (see letter_sound)."""
+        got, got_at = [], []
+        for k in range(len(ids)):
+            near = k and at[k] - at[k - 1] <= 10
+            family = letter_sound(tok.names[int(ids[k])], tok.names[int(ids[k - 1])] if near else '', False)
+            if family and not (got and family == got[-1] and at[k] - got_at[-1] <= 15):
+                got.append(family); got_at.append(int(at[k]))
+        return np.asarray(got, dtype=np.int64), np.asarray(got_at, dtype=np.int64)
+
+    sound, silent = tokens, np.zeros(len(tokens), dtype=bool)
+    if not japanese:
+        sound = np.zeros(len(tokens), dtype=np.int64)
+        k = 0
+        while k < len(tokens):
+            n = k
+            while n < len(tokens) and owner[n][:2] == owner[k][:2]:
+                n += 1
+            i, position = owner[k][:2]
+            text = units[i][position].get('text') or ''
+            if re.search('[\u3400-\u9fff]', text):  # a Chinese character: its letters are pinyin
+                spelled = [tok.names[int(t)] for t in tokens[k:n]]
+                families = [letter_sound(letter, spelled[j - 1] if j else '', True) for j, letter in enumerate(spelled)]
+            else:  # a word: compared the way it is said, one sound to a letter as far as they go
+                said = said_as(text.strip()) or ''.join(tok.names[int(t)] for t in tokens[k:n])
+                families = [f for f in (letter_sound(letter, said[j - 1] if j else '', False) for j, letter in enumerate(said)) if f][:n - k]
+                families += [0] * (n - k - len(families))
+            sound[k:n] = families
+            k = n
+        silent = sound == 0
+        heard, heard_at = by_family(heard, heard_at)
 
     # lines placed by hand: in the version in the music file, and on the draft now on the listening page
     pinned = {}
@@ -546,6 +677,11 @@ def plan(key, pins=True, second=True, separate=False, keep=True):
             if edit.get('t') == line.get('fullText') and int(index) in opening and (edit.get('d') or edits.get('g')):
                 pinned[int(index)] = round(leaves(line)[0]['startTime'] + (edits.get('g') or 0) + (edit.get('d') or 0), 2)
 
+    # lines whose start is to stay where the draft has it (`hold`): only their words are timed again
+    for index in hold:
+        if index in opening and index not in pinned:
+            pinned[index] = units[index][0]['startTime']
+
     # which stretch of the recording each line may lie in: from the platform times, and for a
     # line placed by hand from where the user put it (that holds whatever the platform says)
     length = total * STEP
@@ -561,13 +697,24 @@ def plan(key, pins=True, second=True, separate=False, keep=True):
 
     # A doubled letter (a long vowel, a doubled consonant) is heard as one sound: for the matching
     # only one of the pair is kept, the one that opens a unit if either does.
-    single = np.ones(len(tokens), dtype=bool)
-    for k in range(1, len(tokens)):
+    single = ~silent
+    for k in range(1, len(tokens)) if japanese else ():
         if tokens[k] == tokens[k - 1] and line_of[k] == line_of[k - 1] and single[k - 1]:
             if leading[k] and not leading[k - 1]:
                 single[k - 1] = False
             else:
                 single[k] = False
+    last = -1  # (other languages: the last sound kept, which need not be the letter just before)
+    for k in range(len(tokens)) if not japanese else ():
+        if not single[k]:
+            continue
+        if last >= 0 and sound[k] == sound[last] and line_of[k] == line_of[last]:
+            if leading[k] and not leading[last]:
+                single[last] = False; last = k
+            else:
+                single[k] = False
+        else:
+            last = k
     place = np.cumsum(single) - 1  # position of every sound among those kept
     in_line = place - np.asarray([place[opening[i]] for i in line_of])
 
@@ -587,7 +734,7 @@ def plan(key, pins=True, second=True, separate=False, keep=True):
                 due[own] = int(begin / STEP) + (0 if pace is None else (in_line[own] * pace).astype(np.int64))
         kept = np.flatnonzero(single)
         found = np.full(len(tokens), -1, dtype=np.int64)
-        found[kept] = pair(tokens[kept], heard, low[kept], high[kept], due[kept], heard_at.astype(np.int64), pace is not None)
+        found[kept] = pair(sound[kept], heard, low[kept], high[kept], due[kept], heard_at.astype(np.int64), pace is not None)
         # only sounds found in a row count, and they must have been heard close together
         solid = np.zeros(len(tokens), dtype=bool)
         start = 0
@@ -650,13 +797,17 @@ def plan(key, pins=True, second=True, separate=False, keep=True):
     loose = np.zeros(len(tokens), dtype=bool)
     others, readers = [], []
     if second:
-        mix = mix_reading(folder, source, tok)
+        mix = mix_reading(folder, source, tok, japanese)
+        if mix is not None and not japanese:
+            mix = by_family(*mix)
         if mix is not None and len(mix[0]):
             others.append(match(offset, REACH, *mix, pace=pace)); readers.append('karaoke')
-        other = second_reading(folder, source, tok)
+        other = second_reading(folder, source, tok) if japanese else None  # (the second model is Japanese)
         if other is not None and len(other[0]):
             others.append(match_sounds(read(folder / 'second-reading.json'))); readers.append('second')
-        for reader, sounds in vocals_readings(folder, source, tok, separate):
+        for reader, sounds in vocals_readings(folder, source, tok, separate, japanese):
+            if not japanese:
+                sounds = by_family(*sounds)
             if reader == 'second':
                 others.append(match_sounds(read(folder / 'vocals-readings.json')['second']))
             else:
@@ -719,7 +870,7 @@ def plan(key, pins=True, second=True, separate=False, keep=True):
     # but only when two readings find it at the same place: one alone was wrong half the time.
     found_elsewhere = {}
     streams = [(heard, heard_at)] + ([mix] if second and mix is not None and len(mix[0]) else []) + ([other] if second and other is not None and len(other[0]) else [])
-    streams += [sounds for _, sounds in vocals_readings(folder, source, tok, False)] if second else []
+    streams += [sounds if japanese else by_family(*sounds) for _, sounds in vocals_readings(folder, source, tok, False, japanese)] if second else []
     for i in order:
         own = np.flatnonzero(line_of == i)
         lead = own[leading[own]]
@@ -735,7 +886,7 @@ def plan(key, pins=True, second=True, separate=False, keep=True):
             a, b = np.searchsorted(sounds_at, left), np.searchsorted(sounds_at, right) - 1
             if b - a + 1 < len(kept) // 2:
                 continue
-            got = pair(tokens[kept], sounds, np.full(len(kept), a, dtype=np.int64), np.full(len(kept), b, dtype=np.int64),
+            got = pair(sound[kept], sounds, np.full(len(kept), a, dtype=np.int64), np.full(len(kept), b, dtype=np.int64),
                        np.full(len(kept), -1, dtype=np.int64), sounds_at.astype(np.int64), True)
             hit = np.flatnonzero(got >= 0)
             if len(hit) < .6 * len(kept):
@@ -927,7 +1078,7 @@ def plan(key, pins=True, second=True, separate=False, keep=True):
             flags.append(f'平台歌词时间那里没听到这句，在 {clock(start)} 听到了，就放在这里（和平台时间差 {abs(start - expected[i]):.1f} 秒），请听一下' if i in expected else f'这句是按听到的位置放的（{clock(start)}），请听一下')
         elif i not in pinned and i in expected and abs(start - expected[i]) > DOUBT:
             flags.append(f'这句比平台歌词的时间{"晚" if start > expected[i] else "早"} {abs(start - expected[i]):.1f} 秒，请听一下')
-        elif i not in pinned and share < .34 and leading[own_tokens].sum() >= 4:
+        elif i not in pinned and share < .34 and leading[own_tokens].sum() >= 4 and (japanese or float((anchor[leading] >= 0).mean()) >= FOLLOWED):
             flags.append('这句的音模型大多没听出来（可能唱的和歌词不一样，或被伴奏盖住），位置是推出来的，请听一下')
         report.append(dict(line=i + 1, old=units[i][0]['startTime'], new=start, expected=expected.get(i), share=share, opening=bool(anchor[opening[i]] >= 0),
                            pinned=i in pinned, kept=i in kept_place, flags=flags, end=row[-1][1],
@@ -938,7 +1089,7 @@ def plan(key, pins=True, second=True, separate=False, keep=True):
     # its start to where the next line begins). Lines they did hear are left alone: there the
     # English aligner, working on the full mix, was the worse of the two when tried.
     english = []
-    if second:
+    if second and japanese:
         wave = None
         for n, i in enumerate(order):
             if not is_english(lines[i].get('fullText', '')) or len(times[i]) < 2 or report[n]['share'] >= .5:
@@ -982,7 +1133,7 @@ def plan(key, pins=True, second=True, separate=False, keep=True):
             row[position] = (row[position][0], min(row[position][1], row[position + 1][0]))
         report[n]['end'] = row[-1][1]
     apply(lines, units, times, only=set(order))
-    return doc, dict(key=key, offset=offset, spread=spread, heard=float((anchor[leading] >= 0).mean()), added=added, cancelled=cancelled, overruled=overruled, second=bool(others), readings=1 + len(others), pace=pace, english=english, lines=report)
+    return doc, dict(key=key, offset=offset, spread=spread, heard=float((anchor[leading] >= 0).mean()), added=added, cancelled=cancelled, overruled=overruled, second=bool(others), readings=1 + len(others), least=LEAST if japanese else LEAST_OTHER, pace=pace, english=english, lines=report)
 
 
 SAME, FEW, LARGE = .2, 3, 1.0  # lines moved by the same amount: within SAME seconds, FEW or more; a LARGE move is listed by itself
@@ -1093,7 +1244,7 @@ def main():
               f" | doubts: {[r['line'] for r in doubts]} | lines ending after the next begins: {late}")
         if '--write' not in sys.argv:
             continue
-        if report['heard'] < LEAST:
+        if report['heard'] < report['least']:
             print(f"   NOT written: only {report['heard']:.0%} of the song was heard where the lines are expected, so these times are not to be trusted")
             continue
         if not (folder / BACKUP).exists() or (read(folder / 'result.json') or {}).get('status') == 'complete':
