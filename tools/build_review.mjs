@@ -26,16 +26,18 @@ const round = value => Math.round(value * 100) / 100;
 // [text, start, end] or [text, start, end, [[base, reading], ...]] when the word carries ruby.
 function packWord(word) {
   const packed = [word.text, round(word.startTime), round(word.endTime)];
-  const reading = part => (part.ruby || []).map(item => item.text).join('');
+  // [base, [[kana, start], ...], start]: each part of the word with the moment it is sung, and
+  // each kana of its reading with its own, so the page can light them one by one.
+  const reading = part => (part.ruby || []).map(item => [item.text, round(item.startTime)]);
   if (word.syllables?.some(part => part.ruby?.length)) {
     const body = word.syllables.map(part => part.text).join('');
     const at = word.text.indexOf(body);
-    const parts = word.syllables.map(part => [part.text, reading(part)]);
-    if (at > 0) parts.unshift([word.text.slice(0, at), '']);
-    if (at >= 0 && at + body.length < word.text.length) parts.push([word.text.slice(at + body.length), '']);
+    const parts = word.syllables.map(part => [part.text, reading(part), round(part.startTime)]);
+    if (at > 0) parts.unshift([word.text.slice(0, at), [], round(word.startTime)]);
+    if (at >= 0 && at + body.length < word.text.length) parts.push([word.text.slice(at + body.length), [], round(word.syllables.at(-1).startTime)]);
     packed.push(parts);
   } else if (word.ruby?.length) {
-    packed.push([[word.text, reading(word)]]);
+    packed.push([[word.text, reading(word), round(word.startTime)]]);
   }
   return packed;
 }
