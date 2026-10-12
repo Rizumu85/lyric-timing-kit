@@ -57,10 +57,22 @@ for (const [key, job] of Object.entries(read(process.argv[2]))) {
   const gone = new Set((job.remove || []).map(line => line - 1));
   if (job.removeFrom) for (let index = job.removeFrom - 1; index < source.rows.length; index++) gone.add(index);
   if (gone.size) {
-    if (fs.existsSync(at('timing-edits.json'))) {
-      const edits = read(at('timing-edits.json')), moved = {};
-      for (const [index, edit] of Object.entries(edits.l)) if (!gone.has(Number(index))) moved[Number(index) - [...gone].filter(i => i < Number(index)).length] = edit;
-      edits.l = moved; write(at('timing-edits.json'), edits);
+    // pending adjustments and the record of hand-placed lines follow their lines
+    for (const name of ['timing-edits.json', 'timing-edits.applied.json']) if (fs.existsSync(at(name))) {
+      const edits = read(at(name)), moved = {};
+      for (const [index, edit] of Object.entries(edits.l || {})) if (!gone.has(Number(index))) moved[Number(index) - [...gone].filter(i => i < Number(index)).length] = edit;
+      edits.l = moved; write(at(name), edits);
+    }
+    // the saved pronunciations lose the same lines (when they are in step with the lyric sheet)
+    if (fs.existsSync(at('prepared.json'))) {
+      const prepared = read(at('prepared.json')), groups = [];
+      let group = [];
+      for (const item of prepared.items || []) { group.push(item); if (item.orig === '\n') { groups.push(group); group = []; } }
+      if (prepared.rows?.length === source.rows.length && groups.length === source.rows.length && !group.length) {
+        prepared.items = groups.filter((_, index) => !gone.has(index)).flat();
+        prepared.rows = prepared.rows.filter((_, index) => !gone.has(index));
+        write(at('prepared.json'), prepared);
+      } else console.log(`${key}: prepared.json is not in step with the lyric sheet and was left alone`);
     }
     source.rows = source.rows.filter((_, index) => !gone.has(index));
     old.lyrics.lines = old.lyrics.lines.filter((_, index) => !gone.has(index));

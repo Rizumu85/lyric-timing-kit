@@ -103,6 +103,8 @@ EARLY = .25  # a line whose opening was not heard may begin this long before its
 LATE = .5  # ... and must begin within this long after it
 SHOWN = .2  # a line's last unit is given this long before the next line, when the unit before it can spare it
 DOUBT = 1.0  # a line this far from its expected start is pointed out
+FAR = 1.0  # in a confirmed song, a line this far from the platform pattern keeps its place
+LEAST = .5  # a re-timing that heard a smaller share of the song than this is not used
 BACKUP = 'aligned.in-file.fia'  # the version in the music file, kept while a new draft waits to be heard
 SECOND = MODELS / 'asr-models' / 'RomajiASR-v1.0.0'  # the second lyric-free reader (weights from its release page; see setup.md)
 LAG = 1  # frames by which the second reader puts a sound later than the karaoke model, typically
@@ -467,7 +469,7 @@ def clock(t):
     return f'{int(t // 60)}:{t % 60:05.2f}'
 
 
-def plan(key, pins=True, second=True, separate=False):
+def plan(key, pins=True, second=True, separate=False, keep=True):
     """The new times of one song. Returns (doc, report); report['lines'] has one entry per sung
     line: line number, old and new start, expected start, share of its sounds heard, flags."""
     folder = OUT / key
@@ -491,9 +493,26 @@ def plan(key, pins=True, second=True, separate=False):
         if not in_step(current):
             raise ValueError('draft, pronunciations and lyric sheet are out of step')
         base = current
+        keep = keep and not waiting  # (a draft that is waiting has not been heard yet)
     doc = json.loads(json.dumps(base))
     lines = doc['lyrics']['lines']
     units = [leaves(line) for line in lines]
+    # A song the user has confirmed: every line of the version in the music file has been heard.
+    # A line that sits far from where the platform times would put it was moved there (by hand,
+    # at a note of the user's, or by the first alignment) and then approved. Its platform time is
+    # wrong; pulling the line back to it would undo a correction. So for such a line the place
+    # it has stands in for the platform time. (The first alignment put line starts up to 0.6 s
+    # early, which is why smaller differences are not taken as corrections.) A line the platform
+    # gives no time for takes its place in the same way.
+    kept_place = set()
+    if keep and (read(folder / 'result.json') or {}).get('confirmed'):
+        gaps = [units[i][0]['startTime'] - sheet[i] for i in range(len(lines)) if units[i] and sheet[i] is not None]
+        if len(gaps) >= 5:
+            usual = float(np.median(gaps))
+            for i in range(len(lines)):
+                if units[i] and (sheet[i] is None or abs(units[i][0]['startTime'] - sheet[i] - usual) > FAR):
+                    sheet[i] = round(units[i][0]['startTime'] - usual, 2)
+                    kept_place.add(i)
     emission = torch.load(folder / 'ja-emission.pt', map_location='cpu', weights_only=True).float().numpy()
     total = len(emission)
     tok = tokenizer()
@@ -514,6 +533,8 @@ def plan(key, pins=True, second=True, separate=False):
     # lines placed by hand: in the version in the music file, and on the draft now on the listening page
     pinned = {}
     if pins:
+        # where the user put them is read off the current draft (the kept copy of the music file's
+        # version may be older than the user's latest adjustments)
         now = current['lyrics']['lines'] if len(current['lyrics']['lines']) == len(lines) else lines
         for index in ((read(folder / 'timing-edits.applied.json') or {}).get('l') or {}):
             if int(index) in opening and leaves(now[int(index)]):
@@ -909,7 +930,7 @@ def plan(key, pins=True, second=True, separate=False):
         elif i not in pinned and share < .34 and leading[own_tokens].sum() >= 4:
             flags.append('这句的音模型大多没听出来（可能唱的和歌词不一样，或被伴奏盖住），位置是推出来的，请听一下')
         report.append(dict(line=i + 1, old=units[i][0]['startTime'], new=start, expected=expected.get(i), share=share, opening=bool(anchor[opening[i]] >= 0),
-                           pinned=i in pinned, flags=flags, end=row[-1][1],
+                           pinned=i in pinned, kept=i in kept_place, flags=flags, end=row[-1][1],
                            pins=[None if anchor[k] < 0 else round(float(anchor[k]) * STEP, 2) for k in own_tokens if leading[k]]))
     # English lines of which the two models heard less than half (they hear English as if it were
     # Japanese, which often works and sometimes does not): the words are placed again by the
@@ -1007,6 +1028,9 @@ def review_note(rows):
         note = f'没有需要专门听的地方，随便听一两处换句就行。这一版是用新流程从头打的轴：{len(small)} 行的句首挪了不到 1 秒（行上有标记），其余没动。'
     else:
         note = '没有需要专门听的地方，随便听一两处换句就行。这一版是用新流程从头打的轴，句首基本没动，改的是每句赶在下一句之前结束、最后一个字来得及亮。'
+    kept = [r for r in rows if r.get('kept') and not r['pinned']]
+    if kept:
+        note += f'有 {len(kept)} 行在你确认过的版本里离平台歌词的时间很远，这次按你确认过的位置找，没有拉回平台时间。'
     if pinned:
         note += f'你手动放过的 {len(pinned)} 行原样保留。'
     note += '不对的行直接用微调改。音乐文件里还是改之前的版本，没问题就点通过。'
@@ -1068,6 +1092,9 @@ def main():
               + f" | starts changed by more than 0.15s: {len(moved)}/{len(rows)} | kept as placed by hand: {[r['line'] for r in pinned]}"
               f" | doubts: {[r['line'] for r in doubts]} | lines ending after the next begins: {late}")
         if '--write' not in sys.argv:
+            continue
+        if report['heard'] < LEAST:
+            print(f"   NOT written: only {report['heard']:.0%} of the song was heard where the lines are expected, so these times are not to be trusted")
             continue
         if not (folder / BACKUP).exists() or (read(folder / 'result.json') or {}).get('status') == 'complete':
             shutil.copyfile(folder / 'aligned.fia', folder / BACKUP)

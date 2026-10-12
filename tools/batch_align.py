@@ -345,6 +345,7 @@ class Pipeline:
                 import onepass
                 onepass._first=(self.japanese.processor,self.japanese.model)  # the model is already loaded
                 refined,report=onepass.plan(source['key'],separate=True)
+                if report['heard']<onepass.LEAST:raise ValueError(f"只听出 {report['heard']:.0%} 的音")
                 lines=refined['lyrics']['lines'];doc['lyrics']['lines']=lines
                 write_json(folder/'aligned.fia',doc)
                 unsure=[r for r in report['lines'] if r['flags']]
