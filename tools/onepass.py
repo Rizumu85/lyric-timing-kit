@@ -107,6 +107,7 @@ DOUBT = 1.0  # a line this far from its expected start is pointed out
 FAR = 1.0  # in a confirmed song, a line this far from the platform pattern keeps its place
 LEAST = .5  # a re-timing that heard a smaller share of the song than this is not used
 LEAST_OTHER = .1  # ... for a song that is not Japanese: the multilingual model hears a third to a half of singing
+TRUSTED = 1.5  # in such a song what was heard of a line is only believed this close (seconds) to where the line is expected
 FOLLOWED = .5  # in such a song a line the model did not make out is only pointed out when it followed the song this well
 BACKUP = 'aligned.in-file.fia'  # the version in the music file, kept while a new draft waits to be heard
 SECOND = MODELS / 'asr-models' / 'RomajiASR-v1.0.0'  # the second lyric-free reader (weights from its release page; see setup.md)
@@ -871,7 +872,9 @@ def plan(key, pins=True, second=True, separate=False, keep=True, hold=()):
     found_elsewhere = {}
     streams = [(heard, heard_at)] + ([mix] if second and mix is not None and len(mix[0]) else []) + ([other] if second and other is not None and len(other[0]) else [])
     streams += [sounds if japanese else by_family(*sounds) for _, sounds in vocals_readings(folder, source, tok, False, japanese)] if second else []
-    for i in order:
+    # (Not in a song that is not Japanese: all its readings come from one model, and one model
+    # reading other audio goes wrong in the same places -- two of them agreeing proves nothing.)
+    for i in order if japanese else ():
         own = np.flatnonzero(line_of == i)
         lead = own[leading[own]]
         if len(lead) < 4 or single[own].sum() < 6 or (anchor[lead] >= 0).mean() >= .34:  # (a line of one repeated sound, a vocalise, could be "found" anywhere)
@@ -919,6 +922,17 @@ def plan(key, pins=True, second=True, separate=False, keep=True, hold=()):
             anchor[k] = -1
 
     expected = {i: sheet[i] + offset for i in order if sheet[i] is not None}
+    # A song that is not Japanese is read by one model only, and by sound family: the same words
+    # sung again a few seconds on are easily taken for the line. What was heard of a line is
+    # believed only when it puts the line's start within TRUSTED of where the line is expected;
+    # otherwise nothing of the line is pinned and the alignment places it from the platform time.
+    for i in order if not japanese else ():
+        own = np.flatnonzero((line_of == i) & (anchor >= 0))
+        if len(own) and i in expected and i not in pinned:
+            first = own[0]
+            begin = (anchor[first] - in_line[first] * (pace or 10)) * STEP
+            if abs(begin - expected[i]) > TRUSTED:
+                anchor[line_of == i] = -1
     hand = {opening[i] for i in pinned}
 
     unbound = set()  # lines whose platform time is given up because hand-placed neighbours contradict it
