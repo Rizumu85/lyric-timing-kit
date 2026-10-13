@@ -28,7 +28,11 @@ export default function activate(folium) {
   if (folium.env.context !== 'main') return;
 
   const flagForReview = async () => {
-    const state = folium.internals.stores.playback.getState(), song = state.currentSong;
+    // host internals carry no compatibility promise, and the declared range reaches past the
+    // versions checked by hand: a later Folia without this store gets a plain message
+    const state = folium.internals?.stores?.playback?.getState?.();
+    if (!state) return '这个版本的 Folia 改了插件用到的内部接口，读不到正在播放的歌；请更新插件';
+    const song = state.currentSong;
     if (!song) return '现在没有在播放的歌';
     const filePath = await localFilePath(song);
     if (!filePath) return '只有本地歌曲可以送去复查';
@@ -71,10 +75,10 @@ export default function activate(folium) {
         folium.ui?.toast?.(message, { type: 'info', durationMs: 2600 });
       };
       button.addEventListener('click', click);
-      const store = folium.internals.stores.playback;
-      const sync = () => { const song = store.getState().currentSong; button.hidden = !(song?.localData?.filePath || song?.localRef?.songId); };
+      const store = folium.internals?.stores?.playback;
+      const sync = () => { const song = store?.getState?.()?.currentSong; button.hidden = !(song?.localData?.filePath || song?.localRef?.songId); };
       sync();
-      const unsubscribe = store.subscribe(sync);
+      const unsubscribe = store?.subscribe?.(sync) || (() => {});
       container.append(style, button);
       return () => { unsubscribe(); button.removeEventListener('click', click); button.remove(); style.remove(); };
     },
