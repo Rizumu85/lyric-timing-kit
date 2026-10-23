@@ -58,7 +58,7 @@ git clone https://github.com/moriwx/FA-Kara vendor/FA-Kara
 
 | 标签种类 | 格式 |
 | --- | --- |
-| ID3v2 | MP3、AAC、TTA、WAV、AIFF |
+| ID3v2 | MP3、AAC、TTA、WAV、AIFF、DSF、DFF |
 | Vorbis 注释 | FLAC、OGG、Opus |
 | MP4 | M4A、ALAC |
 | APEv2 | APE、WavPack |

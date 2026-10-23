@@ -5,7 +5,7 @@ kind of tag it carries, so a new extension needs no code here:
   kind     formats                          plain lyrics          Ruby lyrics (TimeTag with @Ruby)
   vorbis   FLAC, Ogg Vorbis, Opus           LYRICS                RUBY_LYRICS
   mp4      M4A, ALAC                        ©lyr                  ----:com.apple.iTunes:RUBY_LYRICS
-  id3      WAV, AIFF, TTA, AAC              USLT, no descriptor   USLT, descriptor TimeTag-Ruby
+  id3      WAV, AIFF, TTA, AAC, DSF, DFF    USLT, no descriptor   USLT, descriptor TimeTag-Ruby
   ape      APE, WavPack                     Lyrics                RUBY_LYRICS
   asf      WMA                              WM/Lyrics             RUBY_LYRICS
 
@@ -29,6 +29,8 @@ from mutagen import File
 from mutagen.aac import AAC
 from mutagen.aiff import AIFF
 from mutagen.asf import ASF
+from mutagen.dsdiff import DSDIFF
+from mutagen.dsf import DSF
 from mutagen.flac import FLAC
 from mutagen.id3 import ID3, ID3NoHeaderError, TIT2, USLT
 from mutagen.monkeysaudio import MonkeysAudio
@@ -42,14 +44,14 @@ from mutagen.wave import WAVE
 from mutagen.wavpack import WavPack
 
 # what Folia accepts as local music
-AUDIO_EXTENSIONS = ('.mp3', '.flac', '.m4a', '.wav', '.ogg', '.opus', '.aac', '.alac', '.ape', '.wv', '.tta', '.wma', '.aif', '.aiff', '.caf')
+AUDIO_EXTENSIONS = ('.mp3', '.flac', '.m4a', '.wav', '.ogg', '.opus', '.aac', '.alac', '.ape', '.wv', '.tta', '.wma', '.aif', '.aiff', '.caf', '.dsf', '.dff')
 RUBY = 'RUBY_LYRICS'
 RUBY_DESCRIPTOR = 'TimeTag-Ruby'
 FREEFORM = '----:com.apple.iTunes:' + RUBY
 KINDS = (
     ((FLAC, OggVorbis, OggOpus, OggFLAC), 'vorbis'),
     ((MP4,), 'mp4'),
-    ((WAVE, AIFF, TrueAudio), 'id3'),
+    ((WAVE, AIFF, TrueAudio, DSF, DSDIFF), 'id3'),  # DSF keeps the tag at the end, DSDIFF in an "ID3 " chunk
     ((AAC,), 'id3-file'),  # no tag support of its own: an ID3 tag is put in front of the stream
     ((MonkeysAudio, WavPack, Musepack), 'ape'),
     ((ASF,), 'asf'),

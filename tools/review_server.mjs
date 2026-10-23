@@ -15,7 +15,7 @@ const KEY = /^[0-9a-f]{12}(-rf)?$/;
 
 // What a browser plays as it is. Anything else Folia plays (APE, WavPack, TTA, WMA, AIFF, ALAC)
 // is converted once to FLAC, which is lossless and keeps the timeline, and kept in a temp folder.
-const AUDIO = /\.(mp3|flac|m4a|wav|ogg|opus|aac|alac|ape|wv|tta|wma|aif|aiff)$/i;
+const AUDIO = /\.(mp3|flac|m4a|wav|ogg|opus|aac|alac|ape|wv|tta|wma|aif|aiff|dsf|dff)$/i;
 const TYPES = { '.mp3': 'audio/mpeg', '.flac': 'audio/flac', '.m4a': 'audio/mp4', '.wav': 'audio/wav', '.ogg': 'audio/ogg', '.opus': 'audio/ogg', '.aac': 'audio/aac' };
 const served = new Map();
 function playable(file) {

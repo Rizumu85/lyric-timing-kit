@@ -17,7 +17,7 @@ async function search(query) {
 }
 
 const rows = [];
-const AUDIO = /\.(mp3|flac|m4a|wav|ogg|opus|aac|alac|ape|wv|tta|wma|aif|aiff)$/i;
+const AUDIO = /\.(mp3|flac|m4a|wav|ogg|opus|aac|alac|ape|wv|tta|wma|aif|aiff|dsf|dff)$/i;
 for (const file of fs.readdirSync(MUSIC).filter(name => AUDIO.test(name)).sort()) {
   const stem = file.replace(AUDIO, '');
   const [artist, ...rest] = stem.split(' - ');

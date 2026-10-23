@@ -3,40 +3,58 @@
 // nothing else is touched.
 const label = (zh, en) => ({ 'zh-CN': zh, en: en || zh });
 
-// Folia 0.7.12 keeps a local song's file path in its own database; read-only lookup.
-async function localFilePath(song) {
-  if (song?.localData?.filePath) return song.localData.filePath;
-  const id = song?.localRef?.songId;
-  if (!id || typeof indexedDB === 'undefined') return null;
+// Folia keeps a local song's file in its own database (table local_music). The song a mod is given
+// carries the title, artists and album the file is shown with, but not the file, so the record is
+// looked up by those; the song's length breaks a tie. Read-only: never upgraded, created or written.
+const artistsOf = record => [
+  (record.importedMetadata?.artistNames || []).join(' / '),
+  (record.onlineMetadata?.artists || []).map(artist => artist?.name).filter(Boolean).join(' / '),
+];
+const albumsOf = record => [record.importedMetadata?.albumName, record.onlineMetadata?.album?.name].filter(Boolean);
+function localFilePath(song, seconds) {
+  if (song?.source !== 'local' || !song.title || typeof indexedDB === 'undefined') return Promise.resolve(null);
   return new Promise(resolve => {
     const request = indexedDB.open('KineticPlayerDB');
     request.onupgradeneeded = () => { request.transaction.abort(); };
     request.onerror = () => resolve(null);
     request.onsuccess = () => {
-      const db = request.result;
+      const db = request.result, found = [];
+      db.onversionchange = () => db.close();
       if (!db.objectStoreNames.contains('local_music')) { db.close(); resolve(null); return; }
       const transaction = db.transaction('local_music', 'readonly');
-      const record = transaction.objectStore('local_music').get(id);
-      record.onsuccess = () => resolve(record.result?.filePath || null);
-      record.onerror = () => resolve(null);
-      transaction.oncomplete = () => db.close();
+      const cursor = transaction.objectStore('local_music').openCursor();
+      cursor.onsuccess = () => {
+        const at = cursor.result;
+        if (!at) return;
+        const record = at.value;
+        if (record?.title === song.title && record.filePath) found.push({ filePath: record.filePath, artists: artistsOf(record), albums: albumsOf(record), seconds: (Number(record.duration) || 0) / 1000 });
+        at.continue();
+      };
+      cursor.onerror = () => resolve(null);
+      transaction.onabort = () => { db.close(); resolve(null); };
+      transaction.oncomplete = () => {
+        db.close();
+        const narrow = (list, keep) => { const kept = list.filter(keep); return kept.length ? kept : list; };
+        let best = narrow(found, item => item.artists.includes(song.artist || ''));
+        if (song.album) best = narrow(best, item => item.albums.includes(song.album));
+        if (best.length > 1 && seconds > 0) best = [...best].sort((a, b) => Math.abs(a.seconds - seconds) - Math.abs(b.seconds - seconds));
+        resolve(best[0]?.filePath || null);
+      };
     };
   });
 }
 
 export default function activate(folium) {
+  if (folium.host.folium.minor < 7) throw new Error('这个插件需要 Folium 1.7 / Folia 0.7.22 或更新的版本');
   if (folium.env.context !== 'main') return;
 
   const flagForReview = async () => {
-    // host internals carry no compatibility promise, and the declared range reaches past the
-    // versions checked by hand: a later Folia without this store gets a plain message
-    const state = folium.internals?.stores?.playback?.getState?.();
-    if (!state) return '这个版本的 Folia 改了插件用到的内部接口，读不到正在播放的歌；请更新插件';
-    const song = state.currentSong;
+    const state = folium.playback.getState();
+    const song = state.song;
     if (!song) return '现在没有在播放的歌';
-    const filePath = await localFilePath(song);
+    const filePath = await localFilePath(song, state.duration);
     if (!filePath) return '只有本地歌曲可以送去复查';
-    const position = [state.currentTime, state.position, state.progress].find(value => Number.isFinite(value));
+    const position = Number.isFinite(state.position) ? state.position : undefined;
     return (await folium.rpc.call('flagForReview', { fileName: filePath.split(/[\\/]/).pop(), position })).message;
   };
 
@@ -49,11 +67,11 @@ export default function activate(folium) {
   // A small flag beside the progress bar, on each of Folia's progress bars, the collapsed capsule
   // included: that is the one on screen most of the time. One click sends the song and says what
   // happened. It is not drawn for songs that are not local files, which cannot be sent.
-  folium.registries.controlButtons?.register({
+  folium.registries.progressButtons.register({
     id: 'flag',
     slot: 'progress.trailing',
     order: 520,
-    mount: container => {
+    mount: (container, ctx) => {
       const style = document.createElement('style');
       style.textContent = `
         button { appearance:none; display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; padding:0; border:0; border-radius:999px;
@@ -75,12 +93,15 @@ export default function activate(folium) {
         folium.ui?.toast?.(message, { type: 'info', durationMs: 2600 });
       };
       button.addEventListener('click', click);
-      const store = folium.internals?.stores?.playback;
-      const sync = () => { const song = store?.getState?.()?.currentSong; button.hidden = !(song?.localData?.filePath || song?.localRef?.songId); };
+      const sync = () => { button.hidden = folium.playback.getState().song?.source !== 'local'; };
       sync();
-      const unsubscribe = store?.subscribe?.(sync) || (() => {});
+      const unsubscribe = folium.events.on('playback.songChanged', sync);
+      // the bar's own text colour, from the host
+      const paint = () => { const colors = ctx.getColors?.(); if (colors?.text) button.style.color = colors.text; };
+      paint();
+      const stopPaint = ctx.onChange?.(paint);
       container.append(style, button);
-      return () => { unsubscribe(); button.removeEventListener('click', click); button.remove(); style.remove(); };
+      return () => { unsubscribe(); stopPaint?.(); button.removeEventListener('click', click); button.remove(); style.remove(); };
     },
   });
   folium.registries.playerPanelTabs.register({

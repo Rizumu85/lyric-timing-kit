@@ -48,7 +48,7 @@
 
 | 标签种类 | 格式 | 普通歌词 | 带注音的歌词 |
 | --- | --- | --- | --- |
-| ID3v2 | MP3、AAC、TTA、WAV、AIFF | 默认的 `USLT` 帧 | 描述为 `TimeTag-Ruby` 的 `USLT` 帧 |
+| ID3v2 | MP3、AAC、TTA、WAV、AIFF、DSF、DFF | 默认的 `USLT` 帧 | 描述为 `TimeTag-Ruby` 的 `USLT` 帧 |
 | Vorbis 注释 | FLAC、OGG、Opus | `LYRICS` | `RUBY_LYRICS` |
 | MP4 | M4A、ALAC | `©lyr` | `----:com.apple.iTunes:RUBY_LYRICS` |
 | APEv2 | APE、WavPack | `Lyrics` | `RUBY_LYRICS` |

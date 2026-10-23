@@ -13,7 +13,7 @@ const NODE = kit.node || 'node';
 const PORT = Number(kit.port) || 3417;
 const REVIEW_URL = 'http://127.0.0.1:' + PORT;
 // every local format the kit handles
-const AUDIO = /\.(mp3|flac|m4a|wav|ogg|opus|aac|alac|ape|wv|tta|wma|aif|aiff)$/i;
+const AUDIO = /\.(mp3|flac|m4a|wav|ogg|opus|aac|alac|ape|wv|tta|wma|aif|aiff|dsf|dff)$/i;
 const reviewUp = async () => {
   try { return (await (await fetch(REVIEW_URL + '/ping', { signal: AbortSignal.timeout(800) })).text()) === 'lyrics-review'; } catch { return false; }
 };
