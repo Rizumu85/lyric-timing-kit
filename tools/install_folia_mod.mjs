@@ -27,7 +27,7 @@ if (!given && !fs.existsSync(userData)) {
   process.exit(1);
 }
 const files = fs.readdirSync(source).filter(name => fs.statSync(path.join(source, name)).isFile());
-console.log(`插件：${manifest.name} ${manifest.version}（声明支持的 Folia 版本：${manifest.folia}）`);
+console.log(`插件：${manifest.name} ${manifest.version}（需要 Folia 0.7.22 或更新的版本）`);
 console.log(`安装到：${target}${fs.existsSync(target) ? '（会替换现有的同名插件）' : ''}`);
 console.log(`文件：${files.join('、')}，另加 kit.json（工具目录 ${ROOT}，试听页端口 ${REVIEW_PORT}）`);
 if (!write) { console.log('只是预览；加 --write 才会安装。'); process.exit(0); }
@@ -37,4 +37,4 @@ fs.mkdirSync(target, { recursive: true });
 for (const name of files) fs.copyFileSync(path.join(source, name), path.join(target, name));
 fs.writeFileSync(path.join(target, 'kit.json'), JSON.stringify({ tools: ROOT, port: REVIEW_PORT, node: process.execPath }, null, 2) + '\n', 'utf8');
 console.log('已安装。接下来由用户在 Folia 里操作：打开模组面板，启用「' + manifest.name + '」并确认提示；Folia 开着的话先重新加载模组或重启。');
-console.log('如果 Folia 的版本不在上面声明的范围内，它会拒绝加载这个插件；这时不要直接改范围，先确认 Folia 的内部接口没有变。');
+console.log('Folia 比 0.7.22 旧时，插件启动会报错说明需要的版本；升级 Folia 后重新加载即可。');
