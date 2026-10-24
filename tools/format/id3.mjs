@@ -107,25 +107,27 @@ export function embeddedVersions(lyrics, name = 'MP3') {
   })).sort((a, b) => (a.kind === 'ruby' ? 0 : a.descriptor === '' ? 1 : 2) - (b.kind === 'ruby' ? 0 : b.descriptor === '' ? 1 : 2));
 }
 
-function usltFrame(version, descriptor, text) {
+function usltFrame(version, descriptor, text, language = 'jpn') {
   const encode = value => {
     if (version === 4) return new TextEncoder().encode(value);
     const result = new Uint8Array(2 + value.length * 2); result.set([255, 254]);
     for (let i = 0; i < value.length; i++) { result[2+i*2] = value.charCodeAt(i) & 255; result[3+i*2] = value.charCodeAt(i) >> 8; }
     return result;
   };
-  const payload = concat([Uint8Array.from([version === 4 ? 3 : 1, 106, 112, 110]), encode(descriptor), new Uint8Array(version === 4 ? 1 : 2), encode(text)]);
+  const payload = concat([Uint8Array.from([version === 4 ? 3 : 1, ...new TextEncoder().encode(language.slice(0, 3))]), encode(descriptor), new Uint8Array(version === 4 ? 1 : 2), encode(text)]);
   return concat([new TextEncoder().encode('USLT'), sizeBytes(payload.length, version === 4), new Uint8Array(2), payload]);
 }
 
 /** Replace default lyric slots and our Ruby slot. Keep other described lyrics. */
-export function embedDualLyrics(bytes, { plain, ruby }) {
+// `ruby` is the TimeTag/NicoKara version: word times, and readings where the song has them.
+export function embedDualLyrics(bytes, { plain, ruby, language = 'jpn' }) {
   for (const text of [plain, ruby]) if (typeof text !== 'string' || !text || text.length > 1024 * 1024) throw new Error('内嵌歌词内容无效');
-  if (!/^@Ruby\d+=/m.test(ruby)) throw new Error('当前歌词没有可嵌入的 Ruby 注音');
+  if (!/^@Ruby\d+=/m.test(ruby) && !/\[\d{2}:\d{2}:\d{2}\]/.test(ruby)) throw new Error('当前歌词既没有 Ruby 注音也没有逐字时间');
+  if (!/^[a-z]{3}$/.test(language)) throw new Error('歌词语言代码无效');
   const parsed = parseId3(bytes);
   if (![3, 4].includes(parsed.version) || parsed.flags !== 0) throw new Error('写入仅支持无扩展头、无全局去同步的 ID3v2.3 / v2.4；原文件未修改');
   const retained = parsed.frames.filter(frame => !frame.lyric || (frame.lyric.descriptor !== '' && frame.lyric.descriptor !== RUBY_DESCRIPTOR));
-  const bodyFrames = [usltFrame(parsed.version, '', plain), usltFrame(parsed.version, RUBY_DESCRIPTOR, ruby), ...retained.map(frame => frame.raw)];
+  const bodyFrames = [usltFrame(parsed.version, '', plain, language), usltFrame(parsed.version, RUBY_DESCRIPTOR, ruby, language), ...retained.map(frame => frame.raw)];
   const frameSize = bodyFrames.reduce((sum, frame) => sum + frame.length, 0);
   const padding = Math.max(1024, parsed.bodySize - frameSize);
   if (frameSize + padding + 10 > MAX_TAG_BYTES) throw new Error('写入后的标签超过 16 MB');

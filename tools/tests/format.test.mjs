@@ -6,6 +6,7 @@ import { parseFaKara } from '../format/fa-kara.mjs';
 import { pairBilingual } from '../format/lyrics.mjs';
 import { addHangulRuby, romanize } from '../hangul_ruby.mjs';
 import { applyTimingEdits } from '../timing_edits.mjs';
+import { embedDualLyrics, parseId3 } from '../format/id3.mjs';
 
 const ruby = (text, reading, start, end) => ({ text, startTime: start, endTime: end, syllables: [{ text, startTime: start, endTime: end, ruby: [{ text: reading, startTime: start, endTime: end }] }] });
 const shape = lines => lines.map(line => [line.fullText, line.translation || '', (line.words || []).flatMap(word => word.syllables || []).filter(part => part.ruby?.length).map(part => `${part.text}=${part.ruby.map(item => item.text).join('')}`)]);
@@ -37,4 +38,15 @@ test('timing edits move a whole line and refuse a line whose text changed', () =
   assert.equal(applyTimingEdits(doc, { g: 0, l: { 0: { d: 0.5, t: 'a' } } }), 1);
   assert.equal(doc.lyrics.lines[0].words[0].startTime, 1.5);
   assert.throws(() => applyTimingEdits(doc, { g: 0, l: { 0: { d: 0.5, t: 'b' } } }));
+});
+
+test('a song without readings keeps its word times in the TimeTag version, in its own language', () => {
+  const lines = [{ fullText: 'Open the curtains', translation: '幕启', startTime: 1, endTime: 3, words: [
+    { text: 'Open ', startTime: 1, endTime: 1.4 }, { text: 'the ', startTime: 1.4, endTime: 1.9 }, { text: 'curtains', startTime: 1.9, endTime: 3 }] }];
+  const timed = toRubyLrc(lines, {}, 0);
+  const back = pairBilingual(parseFaKara(timed).lines);
+  assert.deepEqual(back[0].words.map(word => [word.text, word.startTime]), [['Open ', 1], ['the ', 1.4], ['curtains', 1.9]]);
+  assert.equal(back[0].translation, '幕启');
+  const written = parseId3(embedDualLyrics(Uint8Array.from([255, 251, 1, 2, 3]), { plain: '[00:01.00]Open the curtains\n[00:01.00]幕启', ruby: timed, language: 'eng' }));
+  assert.deepEqual(written.lyrics.map(item => [item.language, item.descriptor]), [['eng', ''], ['eng', 'TimeTag-Ruby']]);
 });

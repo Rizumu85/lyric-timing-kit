@@ -37,7 +37,10 @@ export async function embedSong(audioPath,fiaPath,backupDir,language,leadMs=50,s
     if(prefix>0)word.syllables.unshift({text:word.text.slice(0,prefix),startTime:word.startTime,endTime:word.startTime});
   }
   const hasRuby=doc.lyrics.lines.some(l=>l.words?.some(w=>w.ruby?.length||w.syllables?.some(s=>s.ruby?.length)));
-  const ruby=hasRuby?toRubyLrc(doc.lyrics.lines,metadata,leadMs):null;
+  // The second version (TimeTag/NicoKara) carries the word times as well as the readings, so every song
+  // whose words are timed gets one, with or without readings; the plain LRC stays for other players.
+  const wordTimed=doc.lyrics.lines.some(l=>l.words?.some(w=>Number.isFinite(w.startTime)));
+  const ruby=hasRuby||wordTimed?toRubyLrc(doc.lyrics.lines,metadata,leadMs):null;
   if(ruby){
     const parsed=pairBilingual(parseFaKara(ruby).lines);
     const count=lines=>lines.flatMap(l=>l.words||[]).flatMap(w=>w.syllables||[]).filter(s=>s.ruby?.length).length;
@@ -54,7 +57,7 @@ export async function embedSong(audioPath,fiaPath,backupDir,language,leadMs=50,s
     const output=execFileSync(python,[path.join(ROOT,'embed_tags.py'),audioPath,path.join(folder,'aligned.bilingual.lrc'),ruby?path.join(folder,'aligned.ruby.lrc'):'-',backupDir,language],{encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'}});
     return {...JSON.parse(output),sourceFia:fiaPath,leadMs,lineCount:doc.lyrics.lines.length,ruby:hasRuby,sidecar:null};
   }
-  const updated=hasRuby?Buffer.from(embedDualLyrics(original,{plain,ruby})):embedPlain(original,plain,language);
+  const updated=ruby?Buffer.from(embedDualLyrics(original,{plain,ruby,language})):embedPlain(original,plain,language);
   const after=parseId3(updated),audioHash=hash(original.subarray(before.totalSize));
   const kept=p=>p.frames.filter(f=>!f.lyric).map(f=>[f.id,hash(f.raw)]);
   if(audioHash!==hash(updated.subarray(after.totalSize))||JSON.stringify(kept(before))!==JSON.stringify(kept(after)))throw new Error('Audio or non-lyric metadata changed');

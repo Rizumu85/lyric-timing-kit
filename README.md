@@ -78,7 +78,7 @@ git clone https://github.com/moriwx/FA-Kara vendor/FA-Kara
 
 ## 播放器
 
-文件里有两份歌词：普通双语 LRC 放在默认的歌词标签里，任何播放器都能读；带注音的逐字歌词使用 TimeTag/NicoKara 的 `@Ruby` 扩展，放在另一个标签里。要显示注音，需要支持该扩展的播放器，例如装了 [双语 · 注音歌词](https://github.com/Rizumu85/folia-bilingual-ruby-lyrics) 模组的 Folia（Folia 的模组市场里可以直接安装）。
+文件里有两份歌词：普通双语 LRC 放在默认的歌词标签里，任何播放器都能读；逐字歌词使用 TimeTag/NicoKara 格式，放在另一个标签里，有注音的歌带 `@Ruby` 注音，没有注音的歌（英文、中文等）也有每个词的时间。要显示注音和逐字时间，需要支持该格式的播放器，例如装了 [双语 · 注音歌词](https://github.com/Rizumu85/folia-bilingual-ruby-lyrics) 模组的 Folia（Folia 的模组市场里可以直接安装）。
 
 ## 许可证与使用限制
 
